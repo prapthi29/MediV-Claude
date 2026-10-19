@@ -7,15 +7,17 @@ export class MedicalRecordVersionRepository {
         medical_record_id, version_number, uploaded_by_user_id, storage_key,
         original_filename, content_type, size_bytes, title, category, content_sha256,
         encryption_algorithm, encrypted_data_key, data_key_iv, data_key_auth_tag,
-        file_iv, file_auth_tag, blockchain_status, blockchain_tx_hash, blockchain_registered_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+        file_iv, file_auth_tag, blockchain_status, blockchain_tx_hash, blockchain_registered_at,
+        doctor_signature, signer_address
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
       RETURNING *`,
       [medicalRecordId, versionNumber, uploadedByUserId, record.storage_key,
        record.original_filename, record.content_type, record.size_bytes, record.title ?? null,
        record.category ?? null, record.content_sha256, record.encryption_algorithm,
        record.encrypted_data_key, record.data_key_iv, record.data_key_auth_tag,
        record.file_iv, record.file_auth_tag, blockchainStatus,
-       record.blockchain_tx_hash ?? null, record.blockchain_registered_at ?? null]
+       record.blockchain_tx_hash ?? null, record.blockchain_registered_at ?? null,
+       record.doctor_signature ?? null, record.signer_address ?? null]
     );
     return result.rows[0];
   }
@@ -32,7 +34,7 @@ export class MedicalRecordVersionRepository {
     const result = await this.database.query(
       `SELECT id, medical_record_id, version_number, uploaded_by_user_id, original_filename,
               content_type, size_bytes, title, category, content_sha256, blockchain_status,
-              blockchain_tx_hash, blockchain_registered_at, created_at
+              blockchain_tx_hash, blockchain_registered_at, signer_address, created_at
        FROM medical_record_versions WHERE medical_record_id = $1 ORDER BY version_number DESC`,
       [medicalRecordId]
     );

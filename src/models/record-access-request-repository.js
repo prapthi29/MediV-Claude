@@ -14,7 +14,7 @@ export class RecordAccessRequestRepository {
          requested_at = NOW(),
          decided_at = NULL
        WHERE medical_record_access_requests.status
-         IN ('rejected', 'revoked')
+         IN ('rejected', 'revoked', 'used')
        RETURNING *`,
       [recordId, patientUserId, doctorUserId]
     );
@@ -55,6 +55,33 @@ export class RecordAccessRequestRepository {
     return result.rows.length > 0;
   }
 
+  // One approval is good for one view: the first successful view uses it up.
+  async consumeApproved({ recordId, patientUserId, doctorUserId }) {
+    const result = await this.database.query(
+      `UPDATE medical_record_access_requests
+       SET status = 'used', used_at = NOW()
+       WHERE record_id = $1
+         AND patient_user_id = $2
+         AND doctor_user_id = $3
+         AND status = 'approved'
+       RETURNING *`,
+      [recordId, patientUserId, doctorUserId]
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async listForDoctorPatient(doctorUserId, patientUserId) {
+    const result = await this.database.query(
+      `SELECT id, record_id, status, requested_at, decided_at, used_at
+       FROM medical_record_access_requests
+       WHERE doctor_user_id = $1 AND patient_user_id = $2`,
+      [doctorUserId, patientUserId]
+    );
+
+    return result.rows;
+  }
+
   async listForPatient(patientUserId) {
     const result = await this.database.query(
       `SELECT
@@ -69,7 +96,9 @@ export class RecordAccessRequestRepository {
          rec.title,
          rec.category,
          rec.created_at AS record_created_at,
-         doctor.email AS doctor_email
+         doctor.email AS doctor_email,
+         doctor.name AS doctor_name,
+         doctor.license_id AS doctor_license_id
        FROM medical_record_access_requests req
        JOIN medical_records rec
          ON rec.id = req.record_id

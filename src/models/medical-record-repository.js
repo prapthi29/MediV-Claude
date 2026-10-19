@@ -14,7 +14,8 @@ export class MedicalRecordRepository {
     title,
     category,
     contentSha256,
-    encryption
+    encryption,
+    signature = {}
   }) {
     const result = await this.database.query(
       `INSERT INTO medical_records (
@@ -32,9 +33,11 @@ export class MedicalRecordRepository {
         data_key_iv,
         data_key_auth_tag,
         file_iv,
-        file_auth_tag
+        file_auth_tag,
+        doctor_signature,
+        signer_address
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *`,
       [
         patientUserId,
@@ -51,7 +54,9 @@ export class MedicalRecordRepository {
         encryption.dataKeyIv,
         encryption.dataKeyAuthTag,
         encryption.fileIv,
-        encryption.fileAuthTag
+        encryption.fileAuthTag,
+        signature.doctorSignature ?? null,
+        signature.signerAddress ?? null
       ]
     );
 
@@ -73,17 +78,21 @@ export class MedicalRecordRepository {
   async listForPatient(patientUserId) {
     const result = await this.database.query(
       `SELECT
-         id,
-         original_filename,
-         content_type,
-         size_bytes,
-         title,
-         category,
-         blockchain_status,
-         created_at
-       FROM medical_records
-       WHERE patient_user_id = $1
-       ORDER BY created_at DESC`,
+         r.id,
+         r.original_filename,
+         r.content_type,
+         r.size_bytes,
+         r.title,
+         r.category,
+         r.blockchain_status,
+         r.current_version,
+         r.signer_address,
+         r.created_at,
+         doctor.name AS doctor_name
+       FROM medical_records r
+       LEFT JOIN users doctor ON doctor.id = r.uploaded_by_user_id
+       WHERE r.patient_user_id = $1
+       ORDER BY r.created_at DESC`,
       [patientUserId]
     );
 
@@ -176,6 +185,10 @@ export class MedicalRecordRepository {
            data_key_auth_tag = v.data_key_auth_tag,
            file_iv = v.file_iv,
            file_auth_tag = v.file_auth_tag,
+           doctor_signature = v.doctor_signature,
+           signer_address = v.signer_address,
+           uploaded_by_user_id = v.uploaded_by_user_id,
+           current_version = v.version_number,
            blockchain_status = 'registered',
            blockchain_tx_hash = COALESCE($3, r.blockchain_tx_hash),
            blockchain_registered_at = COALESCE($4, NOW())

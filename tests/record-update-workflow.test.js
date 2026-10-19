@@ -79,7 +79,14 @@ function makeHarness({ approvalAvailable = true, chainCount = 1 } = {}) {
     recordAccessRequestRepository: { hasApproved: async () => true },
     medicalStorage, fileEncryptionService: new FileEncryptionService({ masterKey: Buffer.alloc(32, 7) }),
     userRepository: { findById: async (id) => id === doctorId ? { id, role: 'doctor', status: 'active' } : { id: patientId, role: 'patient', medical_record_status: 'active' } },
-    recordRegistryClient, consentService: { assertDoctorAccess: async () => true }
+    recordRegistryClient, consentService: { assertDoctorAccess: async () => true },
+    signingKeyService: {
+      signDigest: async (_userId, password) => {
+        if (password !== 'doctor-pass') throw Object.assign(new Error('Wrong password'), { code: 'INVALID_SIGNING_PASSWORD' });
+        return { signature: '0xsig', signerAddress: '0x00000000000000000000000000000000000000d0' };
+      },
+      isKeyOfUser: async () => true
+    }
   });
   return { service, versions, record, recordUpdateApprovalRepository, get approvalConsumed() { return approvalConsumed; }, get versionCount() { return versionCount; } };
 }
@@ -95,28 +102,38 @@ describe('patient-approved medical record updates', () => {
   it('appends a new immutable version only after consuming the exact patient approval', async () => {
     const h = makeHarness();
     const updated = await h.service.updateRecordForDoctor(doctorId, patientId, recordId,
-      { originalname: 'v2.pdf', mimetype: 'application/pdf', size: 3, buffer: Buffer.from('v2') },
-      { title: 'Updated note' }, approvalId);
+      { file: { originalname: 'v2.pdf', mimetype: 'application/pdf', size: 3, buffer: Buffer.from('v2') } },
+      { title: 'Updated note' }, approvalId, 'doctor-pass');
     expect(h.approvalConsumed).toBe(true);
     expect(h.versionCount).toBe(2);
     expect(h.versions).toHaveLength(2);
     expect(h.versions[0].content_sha256).toBe(sha('v1'));
     expect(h.versions[1].blockchain_status).toBe('registered');
     expect(updated.originalFilename).toBe('v2.pdf');
+    expect(h.versions[1].doctor_signature).toBe('0xsig');
+  });
+
+  it('does not use up the approval when the signing password is wrong', async () => {
+    const h = makeHarness();
+    await expect(h.service.updateRecordForDoctor(doctorId, patientId, recordId,
+      { form: { diagnosis: 'Type 2 diabetes' } }, {}, approvalId, 'wrong'))
+      .rejects.toMatchObject({ code: 'INVALID_SIGNING_PASSWORD' });
+    expect(h.approvalConsumed).toBe(false);
+    expect(h.versionCount).toBe(1);
   });
 
   it('rejects a missing, wrong, or already consumed approval', async () => {
     const h = makeHarness({ approvalAvailable: false });
     await expect(h.service.updateRecordForDoctor(doctorId, patientId, recordId,
-      { originalname: 'v2.pdf', mimetype: 'application/pdf', size: 3, buffer: Buffer.from('v2') },
-      {}, approvalId)).rejects.toMatchObject({ code: 'RECORD_UPDATE_APPROVAL_INVALID' });
+      { file: { originalname: 'v2.pdf', mimetype: 'application/pdf', size: 3, buffer: Buffer.from('v2') } },
+      {}, approvalId, 'doctor-pass')).rejects.toMatchObject({ code: 'RECORD_UPDATE_APPROVAL_INVALID' });
   });
 
   it('blocks updates when database and on-chain version counts disagree', async () => {
     const h = makeHarness({ chainCount: 2 });
     await expect(h.service.updateRecordForDoctor(doctorId, patientId, recordId,
-      { originalname: 'v2.pdf', mimetype: 'application/pdf', size: 3, buffer: Buffer.from('v2') },
-      {}, approvalId)).rejects.toMatchObject({ code: 'VERSION_COUNT_MISMATCH' });
+      { file: { originalname: 'v2.pdf', mimetype: 'application/pdf', size: 3, buffer: Buffer.from('v2') } },
+      {}, approvalId, 'doctor-pass')).rejects.toMatchObject({ code: 'VERSION_COUNT_MISMATCH' });
     expect(h.approvalConsumed).toBe(false);
   });
 });

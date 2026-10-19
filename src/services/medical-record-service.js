@@ -3,6 +3,15 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { AppError } from '../utils/app-error.js';
 import { assertProfileActive } from './profile-activation.js';
+import { SigningKeyService } from './signing-key-service.js';
+import {
+  BUNDLE_CONTENT_TYPE,
+  MAX_BUNDLE_BYTES,
+  DIAGNOSIS_FORM_FIELDS,
+  decodeBundle,
+  encodeBundle,
+  recordSignatureDigest
+} from './diagnosis-bundle.js';
 
 export class MedicalRecordService {
   constructor({
@@ -16,7 +25,8 @@ export class MedicalRecordService {
     userRepository,
     recordRegistryClient,
     consentService,
-    auditService
+    auditService,
+    signingKeyService
   }) {
     this.medicalRecordRepository = medicalRecordRepository;
     this.recordAccessRequestRepository = recordAccessRequestRepository;
@@ -29,6 +39,130 @@ export class MedicalRecordService {
     this.recordRegistryClient = recordRegistryClient;
     this.consentService = consentService;
     this.auditService = auditService;
+    this.signingKeyService = signingKeyService;
+  }
+
+  // --------------------------------------------------
+  // DIAGNOSIS CONTENT AND DOCTOR SIGNATURES
+  // --------------------------------------------------
+
+  // Normalises the doctor's input into one bundle: a form, a file, or both.
+  buildBundle({ form, file }, existingAttachment = null) {
+    const cleanForm = this.cleanForm(form);
+    const attachment = file?.buffer?.length
+      ? { filename: file.originalname, contentType: file.mimetype, buffer: file.buffer }
+      : existingAttachment;
+
+    if (!cleanForm && !attachment) {
+      throw new AppError(
+        400,
+        'Fill in the diagnosis form, attach a file, or both.',
+        'RECORD_CONTENT_REQUIRED'
+      );
+    }
+
+    const buffer = encodeBundle({ form: cleanForm, attachment });
+
+    if (buffer.length > MAX_BUNDLE_BYTES) {
+      throw new AppError(413, 'The record is larger than 10 MB.', 'RECORD_TOO_LARGE');
+    }
+
+    return {
+      buffer,
+      originalname: attachment?.filename || 'diagnosis-form',
+      mimetype: BUNDLE_CONTENT_TYPE,
+      size: buffer.length
+    };
+  }
+
+  cleanForm(form) {
+    if (!form || typeof form !== 'object') return null;
+    const clean = {};
+    for (const field of DIAGNOSIS_FORM_FIELDS) {
+      const value = typeof form[field] === 'string' ? form[field].trim() : '';
+      if (value) clean[field] = value;
+    }
+    if (Object.keys(clean).length === 0) return null;
+    if (!clean.diagnosis) {
+      throw new AppError(400, 'The diagnosis field is required when using the form.', 'DIAGNOSIS_REQUIRED');
+    }
+    return clean;
+  }
+
+  async signRecordVersion(doctorUserId, password, { patientUserId, version, contentSha256, title, category }) {
+    if (!this.signingKeyService) {
+      throw new AppError(503, 'Record signing is not configured.', 'SIGNING_UNAVAILABLE');
+    }
+    if (typeof password !== 'string' || !password) {
+      throw new AppError(400, 'Enter your password to sign this record.', 'SIGNING_PASSWORD_REQUIRED');
+    }
+    const digest = recordSignatureDigest({ patientUserId, version, contentSha256, title, category });
+    const { signature, signerAddress } = await this.signingKeyService.signDigest(doctorUserId, password, digest);
+    return { doctorSignature: signature, signerAddress };
+  }
+
+  async signatureValid(record) {
+    if (!record.doctor_signature || !record.signer_address) return null;
+    const digest = recordSignatureDigest({
+      patientUserId: record.patient_user_id,
+      version: Number(record.current_version ?? 1),
+      contentSha256: record.content_sha256,
+      title: record.title,
+      category: record.category
+    });
+    if (!SigningKeyService.verifyDigest(digest, record.doctor_signature, record.signer_address)) {
+      return false;
+    }
+    return this.signingKeyService
+      ? this.signingKeyService.isKeyOfUser(record.signer_address, record.uploaded_by_user_id)
+      : false;
+  }
+
+  async onChainValid(record) {
+    if (record.blockchain_status !== 'registered' || !this.recordRegistryClient) return null;
+    const version = Number(record.current_version ?? 1);
+    const result = typeof this.recordRegistryClient.verifyRecordVersion === 'function'
+      ? await this.recordRegistryClient.verifyRecordVersion({ recordId: record.id, version, contentSha256: record.content_sha256 })
+      : await this.recordRegistryClient.verifyRecord({ recordId: record.id, contentSha256: record.content_sha256 });
+    return typeof result === 'boolean' ? result : result?.valid === true;
+  }
+
+  // Decrypts a record and returns its form, attachment and integrity checks.
+  async openRecord(record, { includeAttachmentBytes = true } = {}) {
+    const { body: ciphertext } = await this.medicalStorage.get({ key: record.storage_key });
+    const plaintext = this.fileEncryptionService.decrypt(ciphertext, record);
+    const { form, attachment } = decodeBundle(plaintext, {
+      filename: record.original_filename,
+      contentType: record.content_type
+    });
+    const hashValid = this.hashesMatch(this.createSha256(plaintext), record.content_sha256);
+    const signatureValid = await this.signatureValid(record);
+    const onChain = await this.onChainValid(record).catch(() => false);
+
+    return {
+      record: this.publicRecord(record),
+      form,
+      attachment: attachment
+        ? {
+            filename: attachment.filename,
+            contentType: attachment.contentType,
+            size: attachment.size ?? attachment.buffer.length,
+            ...(includeAttachmentBytes ? { base64: attachment.buffer.toString('base64') } : {})
+          }
+        : null,
+      attachmentBuffer: attachment?.buffer ?? null,
+      integrity: {
+        hashValid,
+        signatureValid,
+        onChain,
+        verified: hashValid && signatureValid === true && onChain === true
+      }
+    };
+  }
+
+  viewPayload(opened) {
+    const { attachmentBuffer, ...view } = opened;
+    return view;
   }
 
   // --------------------------------------------------
@@ -46,9 +180,10 @@ export class MedicalRecordService {
   async uploadRecordForDoctor(
     doctorUserId,
     patientUserId,
-    file,
+    content,
     metadata,
-    approvalId
+    approvalId,
+    password
   ) {
     await assertProfileActive(this.userRepository, patientUserId);
     await this.consentService.assertDoctorAccess(
@@ -63,6 +198,16 @@ export class MedicalRecordService {
         'RECORD_CREATION_APPROVAL_REQUIRED'
       );
     }
+
+    const bundleFile = this.buildBundle(content ?? {});
+    // Sign before using up the approval, so a mistyped password costs nothing.
+    const signature = await this.signRecordVersion(doctorUserId, password, {
+      patientUserId,
+      version: 1,
+      contentSha256: this.createSha256(bundleFile.buffer),
+      title: metadata?.title,
+      category: metadata?.category
+    });
 
     // Atomic compare-and-set: only one upload can consume this approval.
     const approval = await this.recordCreationApprovalRepository.consume({
@@ -82,8 +227,9 @@ export class MedicalRecordService {
     return this.uploadRecord({
       patientUserId,
       uploadedByUserId: doctorUserId,
-      file,
-      metadata
+      file: bundleFile,
+      metadata,
+      signature
     });
   }
 
@@ -203,7 +349,8 @@ export class MedicalRecordService {
     patientUserId,
     uploadedByUserId,
     file,
-    metadata = {}
+    metadata = {},
+    signature = {}
   }) {
     if (!file) {
       throw new AppError(
@@ -240,7 +387,8 @@ export class MedicalRecordService {
         title: metadata.title,
         category: metadata.category,
         contentSha256,
-        encryption
+        encryption,
+        signature
       });
     } catch (error) {
       await this.medicalStorage
@@ -381,9 +529,21 @@ export class MedicalRecordService {
     return approval;
   }
 
-  async updateRecordForDoctor(doctorUserId, patientUserId, recordId, file, metadata, approvalId) {
+  // The doctor sees the current contents while an approved, unused edit request exists.
+  async getRecordForEdit(doctorUserId, patientUserId, recordId, approvalId) {
     this.requireVersioning();
-    if (!file?.buffer?.length) throw new AppError(400, 'A medical document is required.', 'FILE_REQUIRED');
+    await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
+    const approval = await this.recordUpdateApprovalRepository.findUsable({
+      approvalId, medicalRecordId: recordId, patientUserId, doctorUserId
+    });
+    if (!approval) throw new AppError(403, 'The patient has not approved this edit, or it was already used.', 'RECORD_UPDATE_APPROVAL_INVALID');
+    const record = await this.medicalRecordRepository.findByIdForPatient(recordId, patientUserId);
+    if (!record) throw new AppError(404, 'Medical record not found.', 'RECORD_NOT_FOUND');
+    return this.viewPayload(await this.openRecord(record, { includeAttachmentBytes: false }));
+  }
+
+  async updateRecordForDoctor(doctorUserId, patientUserId, recordId, content, metadata, approvalId, password) {
+    this.requireVersioning();
     await assertProfileActive(this.userRepository, patientUserId);
     await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
     const doctor = await this.userRepository.findById(doctorUserId);
@@ -392,8 +552,6 @@ export class MedicalRecordService {
     }
     const current = await this.medicalRecordRepository.findByIdForPatient(recordId, patientUserId);
     if (!current) throw new AppError(404, 'Medical record not found.', 'RECORD_NOT_FOUND');
-    const accessApproved = await this.recordAccessRequestRepository?.hasApproved({ recordId, patientUserId, doctorUserId });
-    if (!accessApproved) throw new AppError(403, 'The patient has not approved access to this specific record.', 'RECORD_ACCESS_NOT_APPROVED');
     const latest = await this.medicalRecordVersionRepository.findLatest(recordId);
     if (!latest) throw new AppError(409, 'Record version history is missing. Apply migration 026 first.', 'VERSION_HISTORY_MISSING');
     const currentVersion = Number(latest.version_number);
@@ -403,13 +561,36 @@ export class MedicalRecordService {
     const chainCount = await this.recordRegistryClient.getRecordVersionCount({ recordId });
     if (chainCount !== currentVersion) throw new AppError(409, 'Database and blockchain version counts differ. Reconcile before updating.', 'VERSION_COUNT_MISMATCH');
 
+    const usable = await this.recordUpdateApprovalRepository.findUsable?.({
+      approvalId, medicalRecordId: recordId, patientUserId, doctorUserId
+    });
+    if (usable === null) throw new AppError(403, 'A valid, unexpired, unused patient approval for this exact record is required.', 'RECORD_UPDATE_APPROVAL_INVALID');
+
+    let existingAttachment = null;
+    if (content?.keepExistingFile && !content?.file?.buffer?.length) {
+      const opened = await this.openRecord(current);
+      if (opened.attachment) {
+        existingAttachment = {
+          filename: opened.attachment.filename,
+          contentType: opened.attachment.contentType,
+          buffer: opened.attachmentBuffer
+        };
+      }
+    }
+    const file = this.buildBundle(content ?? {}, existingAttachment);
+    const title = metadata?.title ?? current.title;
+    const category = metadata?.category ?? current.category;
+    const contentSha256 = this.createSha256(file.buffer);
+    const signature = await this.signRecordVersion(doctorUserId, password, {
+      patientUserId, version: currentVersion + 1, contentSha256, title, category
+    });
+
     const approval = await this.recordUpdateApprovalRepository.consume({
       approvalId, medicalRecordId: recordId, patientUserId, doctorUserId
     });
     if (!approval) throw new AppError(403, 'A valid, unexpired, unused patient approval for this exact record is required.', 'RECORD_UPDATE_APPROVAL_INVALID');
 
     const storageKey = this.createStorageKey(patientUserId, file.originalname);
-    const contentSha256 = this.createSha256(file.buffer);
     const encryption = this.fileEncryptionService.encrypt(file.buffer);
     await this.medicalStorage.put({ key: storageKey, body: encryption.ciphertext, contentType: 'application/octet-stream' });
     let versionRow;
@@ -420,7 +601,8 @@ export class MedicalRecordService {
         record: {
           storage_key: storageKey, original_filename: file.originalname,
           content_type: file.mimetype, size_bytes: file.size ?? file.buffer.length,
-          title: metadata?.title ?? current.title, category: metadata?.category ?? current.category,
+          title, category,
+          doctor_signature: signature.doctorSignature, signer_address: signature.signerAddress,
           content_sha256: contentSha256, encryption_algorithm: encryption.encryptionAlgorithm,
           encrypted_data_key: encryption.encryptedDataKey, data_key_iv: encryption.dataKeyIv,
           data_key_auth_tag: encryption.dataKeyAuthTag, file_iv: encryption.fileIv,
@@ -492,8 +674,6 @@ export class MedicalRecordService {
     await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
     const record = await this.medicalRecordRepository.findByIdForPatient(recordId, patientUserId);
     if (!record) throw new AppError(404, 'Medical record not found.', 'RECORD_NOT_FOUND');
-    const approved = await this.recordAccessRequestRepository?.hasApproved({ recordId, patientUserId, doctorUserId });
-    if (!approved) throw new AppError(403, 'The patient has not approved access to this specific record.', 'RECORD_ACCESS_NOT_APPROVED');
     return this.medicalRecordVersionRepository.listForRecord(recordId);
   }
 
@@ -504,13 +684,17 @@ export class MedicalRecordService {
     const version = await this.medicalRecordVersionRepository.findVersion(recordId, versionNumber);
     if (!version) throw new AppError(404, 'Record version not found.', 'RECORD_VERSION_NOT_FOUND');
     const { body: ciphertext } = await this.medicalStorage.get({ key: version.storage_key });
-    const body = this.fileEncryptionService.decrypt(ciphertext, version);
-    return { record: { ...this.publicRecord(parent), original_filename: version.original_filename, content_type: version.content_type }, body };
+    const plaintext = this.fileEncryptionService.decrypt(ciphertext, version);
+    const { form, attachment } = decodeBundle(plaintext, { filename: version.original_filename, contentType: version.content_type });
+    if (attachment) {
+      return { record: { ...this.publicRecord(parent), original_filename: attachment.filename, content_type: attachment.contentType }, body: attachment.buffer };
+    }
+    return { record: { ...this.publicRecord(parent), original_filename: `${parent.title || 'diagnosis'}-v${versionNumber}.json`, content_type: 'application/json' }, body: Buffer.from(JSON.stringify(form, null, 2)) };
   }
 
   async downloadRecordVersionForDoctor(doctorUserId, patientUserId, recordId, versionNumber) {
     await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
-    const approved = await this.recordAccessRequestRepository?.hasApproved({ recordId, patientUserId, doctorUserId });
+    const approved = await this.recordAccessRequestRepository?.consumeApproved({ recordId, patientUserId, doctorUserId });
     if (!approved) throw new AppError(403, 'The patient has not approved access to this specific record.', 'RECORD_ACCESS_NOT_APPROVED');
     return this.downloadRecordVersion(patientUserId, recordId, versionNumber);
   }
@@ -543,14 +727,11 @@ export class MedicalRecordService {
       );
     }
 
-    const { body: ciphertext } = await this.medicalStorage.get({
-      key: record.storage_key
-    });
+    const opened = await this.openRecord(record, { includeAttachmentBytes: false });
 
-    const body = this.fileEncryptionService.decrypt(
-      ciphertext,
-      record
-    );
+    if (!opened.attachment) {
+      throw new AppError(404, 'This record has no attached file.', 'NO_ATTACHMENT');
+    }
 
     await this.auditService?.record({
       eventType: 'record_accessed',
@@ -562,9 +743,19 @@ export class MedicalRecordService {
     });
 
     return {
-      record: this.publicRecord(record),
-      body
+      record: {
+        ...this.publicRecord(record),
+        originalFilename: opened.attachment.filename,
+        contentType: opened.attachment.contentType
+      },
+      body: opened.attachmentBuffer
     };
+  }
+
+  async viewOwnRecord(patientUserId, recordId) {
+    const record = await this.medicalRecordRepository.findByIdForPatient(recordId, patientUserId);
+    if (!record) throw new AppError(404, 'Medical record not found.', 'RECORD_NOT_FOUND');
+    return this.viewPayload(await this.openRecord(record, { includeAttachmentBytes: false }));
   }
 
   // --------------------------------------------------
@@ -589,13 +780,38 @@ export class MedicalRecordService {
       await this.medicalRecordRepository.listForPatient(
         patientUserId
       );
+    const viewRequests =
+      (await this.recordAccessRequestRepository?.listForDoctorPatient?.(doctorUserId, patientUserId)) ?? [];
+    const editRequests =
+      (await this.recordUpdateApprovalRepository?.listForDoctorPatient?.(doctorUserId, patientUserId)) ?? [];
 
-    return records.map((record) => ({
-      id: record.id,
-      originalFilename: record.original_filename,
-      title: record.title,
-      category: record.category,
-      createdAt: record.created_at
+    return records.map((record) => {
+      const view = viewRequests.find((r) => r.record_id === record.id);
+      const edit = editRequests.find((r) => r.medical_record_id === record.id);
+      return {
+        id: record.id,
+        originalFilename: record.original_filename,
+        title: record.title,
+        category: record.category,
+        version: Number(record.current_version ?? 1),
+        doctorName: record.doctor_name ?? null,
+        createdAt: record.created_at,
+        viewRequest: view ? { id: view.id, status: view.status } : null,
+        editRequest: edit
+          ? { id: edit.id, status: new Date(edit.expires_at) <= new Date() && ['pending', 'approved'].includes(edit.status) ? 'expired' : edit.status }
+          : null
+      };
+    });
+  }
+
+  async listRecordCreationRequestsForDoctor(doctorUserId, patientUserId) {
+    await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
+    const rows = await this.recordCreationApprovalRepository.listForDoctorPatient(doctorUserId, patientUserId);
+    return rows.map((row) => ({
+      id: row.id,
+      status: new Date(row.expires_at) <= new Date() && ['pending', 'approved'].includes(row.status) ? 'expired' : row.status,
+      requestedAt: row.requested_at,
+      expiresAt: row.expires_at
     }));
   }
 
@@ -726,69 +942,27 @@ export class MedicalRecordService {
   // DOCTOR: DOWNLOAD A PATIENT FILE
   // --------------------------------------------------
 
-  async downloadRecordForDoctor(
-    doctorUserId,
-    patientUserId,
-    recordId
-  ) {
-    await this.consentService.assertDoctorAccess(
-      patientUserId,
-      doctorUserId
-    );
+  // A view approval allows exactly one view: opening the record uses it up.
+  async viewRecordForDoctor(doctorUserId, patientUserId, recordId) {
+    await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
+    const record = await this.medicalRecordRepository.findByIdForPatient(recordId, patientUserId);
+    if (!record) throw new AppError(404, 'Medical record not found.', 'RECORD_NOT_FOUND');
 
-    const record =
-      await this.medicalRecordRepository.findByIdForPatient(
-        recordId,
-        patientUserId
-      );
-
-    if (!record) {
-      throw new AppError(
-        404,
-        'Medical record not found.',
-        'RECORD_NOT_FOUND'
-      );
+    const used = await this.recordAccessRequestRepository.consumeApproved({ recordId, patientUserId, doctorUserId });
+    if (!used) {
+      throw new AppError(403, 'The patient has not approved a view of this record, or the approval was already used.', 'RECORD_ACCESS_NOT_APPROVED');
     }
 
-    const approved =
-      await this.recordAccessRequestRepository.hasApproved({
-        recordId: record.id,
-        patientUserId,
-        doctorUserId
-      });
-
-    if (!approved) {
-      throw new AppError(
-        403,
-        'The patient has not approved access to this specific file.',
-        'RECORD_ACCESS_NOT_APPROVED'
-      );
-    }
-
-    const { body: ciphertext } = await this.medicalStorage.get({
-      key: record.storage_key
-    });
-
-    const body = this.fileEncryptionService.decrypt(
-      ciphertext,
-      record
-    );
-
+    const opened = await this.openRecord(record);
     await this.auditService?.record({
       eventType: 'record_accessed',
       actorUserId: doctorUserId,
       subjectUserId: patientUserId,
       resourceType: 'medical_record',
       resourceId: record.id,
-      metadata: {
-        access: 'approved_file_specific_request'
-      }
+      metadata: { access: 'single_view_approval', requestId: used.id }
     });
-
-    return {
-      record: this.publicRecord(record),
-      body
-    };
+    return this.viewPayload(opened);
   }
 
   // --------------------------------------------------
@@ -871,32 +1045,19 @@ export class MedicalRecordService {
         record.content_sha256
       );
 
-      let blockchainValid = null;
-
-      if (
-        record.blockchain_status === 'registered' &&
-        this.recordRegistryClient
-      ) {
-        const blockchainResult =
-          await this.recordRegistryClient.verifyRecord({
-            recordId: record.id,
-            contentSha256: record.content_sha256
-          });
-
-        blockchainValid =
-          typeof blockchainResult === 'boolean'
-            ? blockchainResult
-            : blockchainResult?.valid === true;
-      }
+      const blockchainValid = await this.onChainValid(record);
+      const signatureValid = await this.signatureValid(record);
 
       return {
         recordId: record.id,
         valid:
           localValid &&
           record.blockchain_status === 'registered' &&
-          blockchainValid === true,
+          blockchainValid === true &&
+          signatureValid !== false,
         localValid,
-        blockchainValid
+        blockchainValid,
+        signatureValid
       };
     } catch (error) {
       if (error.code === 'DECRYPTION_FAILED') {
@@ -1111,6 +1272,11 @@ export class MedicalRecordService {
       sizeBytes: record.size_bytes,
       title: record.title,
       category: record.category,
+      version: Number(record.current_version ?? 1),
+      format: record.content_type === BUNDLE_CONTENT_TYPE ? 'diagnosis' : 'file',
+      doctorName: record.doctor_name ?? null,
+      signerAddress: record.signer_address ?? null,
+      signed: Boolean(record.doctor_signature || record.signer_address),
       blockchainStatus: record.blockchain_status,
       createdAt: record.created_at
     };

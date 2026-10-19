@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 
 // JSON with object keys sorted at every level, so the same profile always hashes the same
 // whether it came from a request body or from a PostgreSQL jsonb column.
-function stableStringify(value) {
+export function stableStringify(value) {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
   if (value && typeof value === 'object') {
     return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;

@@ -51,6 +51,19 @@ export class RecordCreationApprovalRepository {
     return result.rows;
   }
 
+  async listForDoctorPatient(doctorUserId, patientUserId) {
+    const result = await this.database.query(
+      `SELECT id, status, requested_at, expires_at, decided_at, consumed_at
+       FROM medical_record_creation_approvals
+       WHERE doctor_user_id = $1 AND patient_user_id = $2
+       ORDER BY requested_at DESC
+       LIMIT 20`,
+      [doctorUserId, patientUserId]
+    );
+
+    return result.rows;
+  }
+
   async decide({ approvalId, patientUserId, status }) {
     if (!['approved', 'rejected'].includes(status)) {
       throw new Error('INVALID_CREATION_APPROVAL_DECISION');

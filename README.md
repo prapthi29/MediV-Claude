@@ -118,6 +118,16 @@ A patient's account is not active until a doctor creates their basic profile: ge
 
 Every saved version is signed by the doctor (password re-entry unlocks their key) over the SHA-256 hash of the canonical profile, bound to the patient and version number. The hash is registered on-chain as that version of the patient's profile record. Reads return an `integrity` object (`hashValid`, `signatureValid`, `onChain`, `verified`). Until the profile exists, record creation, prescriptions and emergency access for that patient return `409 PROFILE_NOT_ACTIVE`. Patients can no longer write their own profile; the old `/patients/me/profile` endpoints are removed.
 
+## Medical records
+
+A doctor's record can be a diagnosis form, a file (PDF, image or Word, up to 10 MB), or both. Each one needs a patient approval, and every approval works once:
+
+- **Add**: the doctor asks (`POST /doctor/patients/:id/record-creation-requests`), the patient approves, and the doctor saves one record with it.
+- **View**: the doctor asks for a specific record, the patient approves, and `POST /doctor/patients/:id/records/:recordId/view` returns it once. A second view needs a new approval.
+- **Edit**: the doctor asks, the patient approves, the doctor can load the current contents while the approval is unused, and saving creates a new version. Earlier versions are kept.
+
+The form and file are packed into one object (`src/services/diagnosis-bundle.js`), encrypted with AES-256-GCM, and its SHA-256 hash is registered on the chain for each version. The doctor signs every version with their password-locked key; the signed digest covers the patient, version, content hash, title and type. Patients and doctors see a hash, signature and on-chain check whenever a record is opened, so a change made directly in the database shows as "Could not be verified".
+
 ## Admin scope
 
 Admins approve or reject doctor and pharmacy accounts only. Their user list and audit log contain only doctors, pharmacies and admins, and only account events (`user_approved`, `user_rejected`, `signing_key_created`). Patient accounts and patient-related events are not visible to admins.

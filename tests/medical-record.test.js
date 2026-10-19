@@ -91,6 +91,8 @@ class MemoryRecords {
       data_key_auth_tag: input.encryption.dataKeyAuthTag,
       file_iv: input.encryption.fileIv,
       file_auth_tag: input.encryption.fileAuthTag,
+      doctor_signature: input.signature?.doctorSignature ?? null,
+      signer_address: input.signature?.signerAddress ?? null,
       created_at: new Date().toISOString()
     };
 
@@ -114,6 +116,11 @@ class MemoryRecords {
     );
   }
 }
+
+const signingKeyService = {
+  signDigest: async () => ({ signature: '0xsig', signerAddress: '0x00000000000000000000000000000000000000d0' }),
+  isKeyOfUser: async () => true
+};
 
 class MemoryStorage {
   constructor() {
@@ -168,7 +175,8 @@ function api({
     fileEncryptionService: new FileEncryptionService({
       masterKey: Buffer.alloc(32, 7)
     }),
-    consentService
+    consentService,
+    signingKeyService
   });
 
   return createApp({
@@ -291,7 +299,9 @@ describe('medical record API', () => {
 
       consentService: {
         assertDoctorAccess: async () => true
-      }
+      },
+
+      signingKeyService
     });
 
     const app = createApp({
@@ -306,6 +316,7 @@ describe('medical record API', () => {
       .post(`/api/v1/doctor/patients/${PATIENT_ID}/records`)
       .set('Authorization', `Bearer ${tokenFor('doctor')}`)
       .field('approvalId', APPROVAL_ID)
+      .field('password', 'Correct-Horse-Battery9!')
       .field('title', 'Consultation note')
       .field('category', 'clinical-note')
       .attach(
@@ -322,8 +333,31 @@ describe('medical record API', () => {
     expect(upload.body.record).toMatchObject({
       patientUserId: PATIENT_ID,
       originalFilename: 'note.pdf',
-      category: 'clinical-note'
+      category: 'clinical-note',
+      format: 'diagnosis',
+      signed: true
     });
+
+    const formOnly = await request(app)
+      .post(`/api/v1/doctor/patients/${PATIENT_ID}/records`)
+      .set('Authorization', `Bearer ${tokenFor('doctor')}`)
+      .field('approvalId', APPROVAL_ID)
+      .field('password', 'Correct-Horse-Battery9!')
+      .field('title', 'Fever review')
+      .field('category', 'diagnosis')
+      .field('form', JSON.stringify({ diagnosis: 'Viral fever', treatmentPlan: 'Rest and fluids' }));
+
+    expect(formOnly.status).toBe(201);
+
+    const empty = await request(app)
+      .post(`/api/v1/doctor/patients/${PATIENT_ID}/records`)
+      .set('Authorization', `Bearer ${tokenFor('doctor')}`)
+      .field('approvalId', APPROVAL_ID)
+      .field('password', 'Correct-Horse-Battery9!')
+      .field('title', 'Nothing');
+
+    expect(empty.status).toBe(400);
+    expect(empty.body.error.code).toBe('RECORD_CONTENT_REQUIRED');
   });
 
   it('allows a patient to revoke their creation approval request', async () => {
@@ -373,6 +407,7 @@ describe('medical record API', () => {
       .post(`/api/v1/doctor/patients/${PATIENT_ID}/records`)
       .set('Authorization', `Bearer ${tokenFor('doctor')}`)
       .field('approvalId', APPROVAL_ID)
+      .field('password', 'Correct-Horse-Battery9!')
       .attach('document', Buffer.from('test document'), {
         filename: 'report.pdf',
         contentType: 'application/pdf'

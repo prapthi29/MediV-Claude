@@ -195,25 +195,6 @@ export const api = {
   getPatientRecords: () =>
     request("/patients/me/records").then((r) => r.records),
 
-  uploadOwnRecord: (file, { title, category } = {}) => {
-    const form = new FormData();
-
-    form.append("document", file);
-
-    if (title) {
-      form.append("title", title);
-    }
-
-    if (category) {
-      form.append("category", category);
-    }
-
-    return request("/patients/me/records", {
-      method: "POST",
-      body: form,
-    }).then((r) => r.record);
-  },
-
   verifyRecord: (recordId) =>
     request(`/patients/me/records/${recordId}/verify`, {
       method: "POST",
@@ -248,40 +229,85 @@ export const api = {
       (r) => r.records
     ),
 
-  downloadRecordForDoctor: (patientId, recordId, filename) =>
-    downloadFile(
-      `/doctor/patients/${patientId}/records/${recordId}/download`,
-      filename
+  // Doctor's own creation requests for this patient, newest first.
+  getRecordCreationRequestsForDoctor: (patientId) =>
+    request(`/doctor/patients/${patientId}/record-creation-requests`).then(
+      (r) => r.approvals || []
     ),
 
-  createRecord: ({
-    patient_id,
+  requestRecordCreation: (patientId) =>
+    request(`/doctor/patients/${patientId}/record-creation-requests`, {
+      method: "POST",
+    }).then((r) => r.approval),
+
+  // Uses up the patient's single-view approval.
+  viewRecordForDoctor: (patientId, recordId) =>
+    request(`/doctor/patients/${patientId}/records/${recordId}/view`, {
+      method: "POST",
+    }),
+
+  requestRecordUpdate: (patientId, recordId) =>
+    request(
+      `/doctor/patients/${patientId}/records/${recordId}/update-requests`,
+      { method: "POST" }
+    ).then((r) => r.approval),
+
+  getRecordForEdit: (patientId, recordId, approvalId) =>
+    request(
+      `/doctor/patients/${patientId}/records/${recordId}/edit?approvalId=${encodeURIComponent(approvalId)}`
+    ),
+
+  // Creates (no recordId) or edits a record. Content is a form, a file, or both.
+  saveRecord: ({
     patientId,
-    record_type,
+    recordId,
+    approvalId,
     title,
     category,
+    form,
     file,
+    keepExistingFile,
+    password,
   }) => {
-    const form = new FormData();
+    const body = new FormData();
+    body.append("approvalId", approvalId);
+    body.append("password", password);
+    if (title) body.append("title", title);
+    if (category) body.append("category", category);
+    if (form) body.append("form", JSON.stringify(form));
+    if (file) body.append("document", file);
+    if (keepExistingFile) body.append("keepExistingFile", "true");
 
-    form.append("document", file);
+    const path = recordId
+      ? `/doctor/patients/${patientId}/records/${recordId}/versions`
+      : `/doctor/patients/${patientId}/records`;
 
-    if (title) {
-      form.append("title", title);
-    }
-
-    if (category || record_type) {
-      form.append("category", category || record_type);
-    }
-
-    return request(
-      `/doctor/patients/${patientId || patient_id}/records`,
-      {
-        method: "POST",
-        body: form,
-      }
-    ).then((r) => r.record);
+    return request(path, { method: "POST", body }).then((r) => r.record);
   },
+
+  // ---------- patient: approve record creation and edits ----------
+
+  getRecordCreationRequests: () =>
+    request("/patients/me/record-creation-requests").then(
+      (r) => r.approvals || []
+    ),
+
+  decideRecordCreation: (requestId, decision) =>
+    request(`/patients/me/record-creation-requests/${requestId}/${decision}`, {
+      method: "POST",
+    }).then((r) => r.approval),
+
+  getRecordUpdateRequests: () =>
+    request("/patients/me/record-update-requests").then(
+      (r) => r.approvals || []
+    ),
+
+  decideRecordUpdate: (requestId, decision) =>
+    request(`/patients/me/record-update-requests/${requestId}/${decision}`, {
+      method: "POST",
+    }).then((r) => r.approval),
+
+  viewOwnRecord: (recordId) => request(`/patients/me/records/${recordId}`),
 
   // ---------- file-specific access requests ----------
 

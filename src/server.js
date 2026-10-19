@@ -124,7 +124,8 @@ const medicalRecordService = new MedicalRecordService({
   userRepository,
   recordRegistryClient,
   consentService,
-  auditService
+  auditService,
+  signingKeyService
 });
 
 // Wallets

@@ -26,6 +26,27 @@ export class RecordUpdateApprovalRepository {
     return result.rows;
   }
 
+  async listForDoctorPatient(doctorUserId, patientUserId) {
+    const result = await this.database.query(
+      `SELECT id, medical_record_id, status, requested_at, expires_at, decided_at, consumed_at
+       FROM medical_record_update_approvals
+       WHERE doctor_user_id = $1 AND patient_user_id = $2
+       ORDER BY requested_at DESC
+       LIMIT 50`, [doctorUserId, patientUserId]
+    );
+    return result.rows;
+  }
+
+  async findUsable({ approvalId, medicalRecordId, patientUserId, doctorUserId }) {
+    const result = await this.database.query(
+      `SELECT * FROM medical_record_update_approvals
+       WHERE id = $1 AND medical_record_id = $2 AND patient_user_id = $3 AND doctor_user_id = $4
+         AND status = 'approved' AND expires_at > NOW()`,
+      [approvalId, medicalRecordId, patientUserId, doctorUserId]
+    );
+    return result.rows[0] ?? null;
+  }
+
   async decide({ approvalId, patientUserId, status }) {
     if (!['approved', 'rejected'].includes(status)) throw new Error('INVALID_UPDATE_APPROVAL_DECISION');
     const result = await this.database.query(

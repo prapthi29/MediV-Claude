@@ -43,6 +43,7 @@ export function createMedicalRecordRouter(authService, medicalRecordService) {
 
   // Patient-owned record viewing and verification.
   router.get('/me/records', controller.listOwn);
+  router.get('/me/records/:recordId', controller.viewOwn);
   router.get('/me/records/:recordId/download', controller.downloadOwn);
   router.get('/me/records/:recordId/versions', controller.listOwnRecordVersions);
   router.get('/me/records/:recordId/versions/:version/download', controller.downloadOwnRecordVersion);
@@ -84,29 +85,32 @@ export function createDoctorMedicalRecordRouter(authService, medicalRecordServic
     '/patients/:patientId/record-creation-requests',
     controller.requestRecordCreation
   );
+  router.get(
+    '/patients/:patientId/record-creation-requests',
+    controller.listRecordCreationRequestsForDoctor
+  );
 
   router.get('/patients/:patientId/records', controller.listForDoctor);
   router.get('/patients/:patientId/records/:recordId/versions', controller.listDoctorRecordVersions);
   router.get('/patients/:patientId/records/:recordId/versions/:version/download', controller.downloadDoctorRecordVersion);
   router.post('/patients/:patientId/records/:recordId/update-requests', controller.requestRecordUpdate);
+  router.get('/patients/:patientId/records/:recordId/edit', controller.getRecordForEdit);
   router.post('/patients/:patientId/records/:recordId/versions', upload.single('document'), controller.updateRecordForDoctor);
+  // Uses up the patient's single-view approval, so it is a POST.
+  router.post('/patients/:patientId/records/:recordId/view', controller.viewForDoctor);
 
   router.post(
     '/patients/:patientId/records/:recordId/access-request',
     controller.requestRecordAccess
   );
 
-  // Requires multipart field approvalId and file field document.
+  // Multipart: approvalId, password, title, category, optional form (JSON) and optional file field document.
   router.post(
     '/patients/:patientId/records',
     upload.single('document'),
     controller.uploadForDoctor
   );
 
-  router.get(
-    '/patients/:patientId/records/:recordId/download',
-    controller.downloadForDoctor
-  );
 
   return router;
 }

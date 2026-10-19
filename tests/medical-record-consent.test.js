@@ -23,7 +23,7 @@ function setup({ consentActive = true, approved = true } = {}) {
 
   const recordAccessRequestRepository = {
     create: vi.fn(async () => ({ id: 'request-1', status: 'pending' })),
-    hasApproved: vi.fn(async () => approved)
+    consumeApproved: vi.fn(async () => (approved ? { id: 'request-1' } : null))
   };
 
   const medicalStorage = {
@@ -83,7 +83,7 @@ describe('doctor medical-record consent enforcement', () => {
     expect(recordAccessRequestRepository.create).not.toHaveBeenCalled();
   });
 
-  it('blocks downloads after connection consent is revoked, even if the record was approved', async () => {
+  it('blocks views after connection consent is revoked, even if the record was approved', async () => {
     const {
       service,
       recordAccessRequestRepository,
@@ -93,14 +93,14 @@ describe('doctor medical-record consent enforcement', () => {
     } = setup({ consentActive: false, approved: true });
 
     await expect(
-      service.downloadRecordForDoctor(doctorId, patientId, recordId)
+      service.viewRecordForDoctor(doctorId, patientId, recordId)
     ).rejects.toMatchObject({ code: 'CONSENT_REQUIRED' });
 
     expect(consentService.assertDoctorAccess).toHaveBeenCalledWith(
       patientId,
       doctorId
     );
-    expect(recordAccessRequestRepository.hasApproved).not.toHaveBeenCalled();
+    expect(recordAccessRequestRepository.consumeApproved).not.toHaveBeenCalled();
     expect(medicalStorage.get).not.toHaveBeenCalled();
     expect(fileEncryptionService.decrypt).not.toHaveBeenCalled();
   });
@@ -113,10 +113,10 @@ describe('doctor medical-record consent enforcement', () => {
     } = setup({ consentActive: true, approved: false });
 
     await expect(
-      service.downloadRecordForDoctor(doctorId, patientId, recordId)
+      service.viewRecordForDoctor(doctorId, patientId, recordId)
     ).rejects.toMatchObject({ code: 'RECORD_ACCESS_NOT_APPROVED' });
 
-    expect(recordAccessRequestRepository.hasApproved).toHaveBeenCalledWith({
+    expect(recordAccessRequestRepository.consumeApproved).toHaveBeenCalledWith({
       recordId,
       patientUserId: patientId,
       doctorUserId: doctorId

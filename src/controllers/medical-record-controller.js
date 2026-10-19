@@ -5,6 +5,7 @@ import { asyncHandler } from '../utils/async-handler.js';
 const uploadMetadata = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   category: z.enum([
+    'diagnosis',
     'lab-result',
     'imaging',
     'prescription',
@@ -36,6 +37,38 @@ const creationApprovalParams = z.object({
 
 const updateApprovalParams = z.object({ requestId: z.string().uuid() });
 const versionParams = z.object({ recordId: z.string().uuid(), version: z.coerce.number().int().positive().safe() });
+
+const formText = z.string().trim().max(4000).optional();
+const diagnosisForm = z.object({
+  diagnosis: formText,
+  symptoms: formText,
+  findings: formText,
+  treatmentPlan: formText,
+  followUp: formText,
+  notes: formText
+}).strict();
+
+// Multipart bodies carry the form as a JSON string next to the optional file.
+function parseRecordContent(req) {
+  let form = null;
+  if (req.body.form) {
+    let raw;
+    try {
+      raw = JSON.parse(req.body.form);
+    } catch {
+      throw new AppError(400, 'The diagnosis form could not be read.', 'INVALID_DIAGNOSIS_FORM');
+    }
+    form = diagnosisForm.parse(raw);
+  }
+  if (req.file) validateMedicalFile(req.file);
+  return {
+    form,
+    file: req.file ?? null,
+    keepExistingFile: req.body.keepExistingFile === 'true'
+  };
+}
+
+const signingPassword = z.string().min(1).max(200);
 
 const emergencyEssential = z.object({
   isEmergencyEssential: z.boolean()
@@ -104,19 +137,20 @@ export function createMedicalRecordController(medicalRecordService) {
     uploadForDoctor: asyncHandler(async (req, res) => {
       const { patientId } = patientIdParams.parse(req.params);
 
-      validateMedicalFile(req.file);
+      const content = parseRecordContent(req);
 
       const approvalId = z.string().uuid().parse(req.body.approvalId);
 
       const record = await medicalRecordService.uploadRecordForDoctor(
         req.user.sub,
         patientId,
-        req.file,
+        content,
         uploadMetadata.parse({
           title: req.body.title,
           category: req.body.category
         }),
-        approvalId
+        approvalId,
+        signingPassword.parse(req.body.password)
       );
 
       res.status(201).json({ record });
@@ -185,13 +219,31 @@ export function createMedicalRecordController(medicalRecordService) {
 
     updateRecordForDoctor: asyncHandler(async (req, res) => {
       const { patientId, recordId: id } = patientRecordParams.parse(req.params);
-      validateMedicalFile(req.file);
+      const content = parseRecordContent(req);
       const approvalId = z.string().uuid().parse(req.body.approvalId);
       const record = await medicalRecordService.updateRecordForDoctor(
-        req.user.sub, patientId, id, req.file,
-        uploadMetadata.parse({ title: req.body.title, category: req.body.category }), approvalId
+        req.user.sub, patientId, id, content,
+        uploadMetadata.parse({ title: req.body.title, category: req.body.category }), approvalId,
+        signingPassword.parse(req.body.password)
       );
       res.json({ record });
+    }),
+    getRecordForEdit: asyncHandler(async (req, res) => {
+      const { patientId, recordId: id } = patientRecordParams.parse(req.params);
+      const approvalId = z.string().uuid().parse(req.query.approvalId);
+      res.json(await medicalRecordService.getRecordForEdit(req.user.sub, patientId, id, approvalId));
+    }),
+    viewForDoctor: asyncHandler(async (req, res) => {
+      const { patientId, recordId: id } = patientRecordParams.parse(req.params);
+      res.json(await medicalRecordService.viewRecordForDoctor(req.user.sub, patientId, id));
+    }),
+    listRecordCreationRequestsForDoctor: asyncHandler(async (req, res) => {
+      const { patientId } = patientIdParams.parse(req.params);
+      res.json({ approvals: await medicalRecordService.listRecordCreationRequestsForDoctor(req.user.sub, patientId) });
+    }),
+    viewOwn: asyncHandler(async (req, res) => {
+      const { recordId: id } = recordId.parse(req.params);
+      res.json(await medicalRecordService.viewOwnRecord(req.user.sub, id));
     }),
 
     listRecordUpdateRequestsForPatient: asyncHandler(async (req, res) => {
@@ -256,22 +308,6 @@ export function createMedicalRecordController(medicalRecordService) {
         );
 
       res.json({ records });
-    }),
-
-    downloadForDoctor: asyncHandler(async (req, res) => {
-      const { patientId, recordId: id } =
-        patientRecordParams.parse(req.params);
-
-      const { record, body } =
-        await medicalRecordService.downloadRecordForDoctor(
-          req.user.sub,
-          patientId,
-          id
-        );
-
-      res.type(record.contentType);
-      res.attachment(record.originalFilename);
-      res.send(body);
     }),
 
     requestRecordAccess: asyncHandler(async (req, res) => {

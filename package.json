@@ -8,10 +8,10 @@
     "start": "node src/server.js",
     "test": "vitest run tests",
     "test:watch": "vitest tests",
-    "db:migrate": "node src/scripts/migrate.js"
+    "db:migrate": "node src/scripts/migrate.js",
+    "create-admin": "node src/scripts/create-admin.js"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1116.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",

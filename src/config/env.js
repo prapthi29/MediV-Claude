@@ -9,6 +9,10 @@ const schema = z.object({
   DATABASE_URL: z.string().min(1),
   DATABASE_SSL: z.enum(['true', 'false']).default('false'),
 
+  // Comma-separated browser origins allowed to call the API (e.g. the Vercel URL).
+  // Unset means any origin, which is only meant for local development.
+  CORS_ORIGIN: z.string().optional(),
+
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('1h'),
 

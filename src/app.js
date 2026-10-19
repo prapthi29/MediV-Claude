@@ -42,14 +42,17 @@ export function createApp({
   emergencyProfileAccessRequestService,
   auditRepository,
   adminService,
-  signingKeyService
+  signingKeyService,
+  corsOrigin
 }) {
   const app = express();
 
   app.disable('x-powered-by');
 
   app.use(helmet());
-  app.use(cors());
+  app.use(cors(corsOrigin
+    ? { origin: corsOrigin.split(',').map((origin) => origin.trim()).filter(Boolean) }
+    : undefined));
   app.use(express.json({ limit: '1mb' }));
 
   // Authentication and health

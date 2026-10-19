@@ -201,7 +201,8 @@ const app = createApp({
   emergencyProfileAccessRequestService,
   auditRepository,
   adminService,
-  signingKeyService
+  signingKeyService,
+  corsOrigin: config.CORS_ORIGIN
 });
 
 // Start server

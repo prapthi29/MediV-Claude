@@ -1,3 +1,5 @@
+const fs = require('node:fs');
+const path = require('node:path');
 const hre = require('hardhat');
 
 async function main() {
@@ -16,6 +18,15 @@ async function main() {
     blockNumber: receipt.blockNumber
   };
   console.log(JSON.stringify(deployment, null, 2));
+
+  // Keep a public record of persistent deployments (no secrets) for the backend config.
+  if (!['hardhat', 'localhost'].includes(hre.network.name)) {
+    const directory = path.join(__dirname, '..', 'deployments');
+    fs.mkdirSync(directory, { recursive: true });
+    const file = path.join(directory, `${hre.network.name}.json`);
+    fs.writeFileSync(file, `${JSON.stringify(deployment, null, 2)}\n`);
+    console.log(`Saved ${path.relative(process.cwd(), file)}`);
+  }
 }
 
 main().catch((error) => {

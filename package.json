@@ -3,13 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "vitest run tests",
     "test:watch": "vitest tests",
     "db:migrate": "node src/scripts/migrate.js",
-    "create-admin": "node src/scripts/create-admin.js"
+    "create-admin": "node src/scripts/create-admin.js",
+    "storage:setup": "node src/scripts/setup-supabase-storage.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

@@ -1,13 +1,60 @@
-# MediVault backend
+# MediVault
 
-Phase 1–6 foundation for MediVault: Express, PostgreSQL, JWT authentication, bcrypt password hashing, patient/doctor/pharmacy role authorization, patient-owned profiles, private AWS S3 medical-document storage, application-level encryption, and SHA-256 integrity verification. Blockchain features are intentionally deferred until later phases.
+Blockchain-backed electronic health records: Express + PostgreSQL API, Next.js frontend, and a Solidity integrity registry. Files are encrypted with AES-256-GCM and stored locally or in a private Supabase Storage bucket; SHA-256 hashes and consent expiries are anchored on-chain.
 
 ## Run locally
 
-1. Copy `.env.example` to `.env` and supply a PostgreSQL connection string, a 32+ character JWT secret, AWS region, and an S3 bucket name. Configure AWS credentials through the standard AWS SDK credential-provider chain.
-2. Create the `medivault` PostgreSQL database.
-3. Run `npm install`, then `npm run db:migrate`.
-4. Start the API with `npm run dev`.
+Requires Node 20+ and PostgreSQL 14+. Use four terminals.
+
+1. **Install dependencies**
+
+   ```bash
+   npm install
+   (cd frontend && npm install)
+   (cd blockchain && npm install)
+   ```
+
+2. **Database** – create a database (for example `medivault_dev`), copy `.env.example` to `.env`, and set `DATABASE_URL` to it. Generate the secrets:
+
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"     # JWT_SECRET
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"  # FILE_ENCRYPTION_KEY
+   npm run db:migrate
+   ```
+
+3. **Local blockchain** (terminal 1, keep running):
+
+   ```bash
+   cd blockchain && npx hardhat node
+   ```
+
+   In another terminal, deploy the contract:
+
+   ```bash
+   cd blockchain && npx hardhat run scripts/deploy.js --network localhost
+   ```
+
+   Put the printed `address` in `BLOCKCHAIN_CONTRACT_ADDRESS`. Set `BLOCKCHAIN_PRIVATE_KEY` to Hardhat's Account #0 private key (printed when the node starts; it is the contract owner). Keep `BLOCKCHAIN_RPC_URL=http://127.0.0.1:8545` and `BLOCKCHAIN_CHAIN_ID=31337`.
+
+   The Hardhat node keeps its state in memory. After restarting it, redeploy, update `BLOCKCHAIN_CONTRACT_ADDRESS`, and expect existing consents to need re-granting. Leaving the address as `0x000…0` uses an in-memory mock chain instead.
+
+4. **Admin account**
+
+   ```bash
+   npm run create-admin -- admin@example.com 'Choose#AStrongPass1'
+   ```
+
+5. **Start the API** (terminal 2): `npm run dev` (port 3001).
+
+6. **Start the frontend** (terminal 3): `cd frontend && npm run dev`, then open http://localhost:3000.
+
+### Tests
+
+```bash
+npm test                                   # backend unit/API tests
+TEST_DATABASE_URL=postgres://... npm test  # also runs the database integration tests (use a throwaway database with migrations applied)
+cd blockchain && npm test                  # contract tests
+```
 
 ## Endpoints
 
@@ -43,7 +90,7 @@ Registration payload: `{ "email": "user@example.com", "password": "at-least-12-c
 
 Patient profile endpoints are restricted to the authenticated patient. Profile creation requires `firstName`, `lastName`, and `dateOfBirth` (`YYYY-MM-DD`); contact, address, blood type, allergy, and emergency-contact fields are optional.
 
-Medical-document endpoints are currently restricted to the owning patient. They accept PDF, JPEG, and PNG files up to 10 MB. Before upload, each document is encrypted with a newly generated AES-256-GCM data key. The data key is itself encrypted by the base64 32-byte `FILE_ENCRYPTION_KEY` master key and only its encrypted form plus IVs/authentication tags are stored in PostgreSQL. S3 receives ciphertext, uses S3-managed encryption at rest, and is never exposed through an S3 URL. Keep the master key in a secrets manager in production and rotate it using a key-versioned migration process.
+Medical-document endpoints are currently restricted to the owning patient. They accept PDF, JPEG, and PNG files up to 10 MB. Before upload, each document is encrypted with a newly generated AES-256-GCM data key. The data key is itself encrypted by the base64 32-byte `FILE_ENCRYPTION_KEY` master key and only its encrypted form plus IVs/authentication tags are stored in PostgreSQL. Storage (local disk or Supabase) receives only ciphertext and is never exposed through a public URL. Keep the master key in a secrets manager in production and rotate it using a key-versioned migration process.
 
 Each new document is also hashed with SHA-256 before encryption. The digest is stored in PostgreSQL and is compared against the decrypted document by the verification endpoint. The digest is prepared for blockchain registration in Phase 7, but no medical data or files are placed on-chain.
 

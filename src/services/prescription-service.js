@@ -36,7 +36,7 @@ export class PrescriptionService {
       await this.auditService?.record({ eventType: 'prescription_created', actorUserId: doctorUserId, subjectUserId: patientUserId, resourceType: 'prescription', resourceId: prescription.id, metadata: {} });
       return this.publicPrescription(prescription);
     } catch (error) {
-      if (!persisted) await this.medicalStorage.delete(storageKey).catch(() => {});
+      if (!persisted) await this.medicalStorage.delete({ key: storageKey }).catch(() => {});
       throw error;
     }
   }

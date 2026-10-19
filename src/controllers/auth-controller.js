@@ -17,7 +17,7 @@ export function createAuthController(authService) {
     register: asyncHandler(async (req, res) => {
       const input = registration.parse(req.body);
       const { user, token } = await authService.register(input);
-      res.status(201).json({ user: authService.publicUser(user), token });
+      res.status(201).json({ user, token });
     }),
     login: asyncHandler(async (req, res) => {
       const input = credentials.parse(req.body);

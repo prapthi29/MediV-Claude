@@ -96,7 +96,7 @@ export class SigningKeyService {
         decipher.final()
       ]);
     } catch {
-      throw new AppError(401, 'Incorrect password. The document was not signed.', 'INVALID_SIGNING_PASSWORD');
+      throw new AppError(401, 'Incorrect password. Nothing was signed.', 'INVALID_SIGNING_PASSWORD');
     } finally {
       derivedKey?.fill(0);
     }

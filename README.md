@@ -140,7 +140,9 @@ The hash the doctor signs and registers on-chain is built from two parts: `sha25
 
 ## Emergency access and audit trail
 
-Phase 12 lets a patient mark selected records as emergency-essential. A doctor may request an emergency grant with a documented reason and expiry of at most one hour. Only those essential record metadata are returned while the grant remains active; each grant and access is recorded in the audit trail and anchored on-chain when both wallets are configured. The audit trail also records consent changes and prescription creation/verification.
+Glass-break access is for emergencies when the patient cannot link the doctor. The doctor enters the patient's health ID (`MV-…`), a reason, and 15, 30 or 45 minutes, and signs the request with their password (`POST /api/v1/emergency-access`). The server signs the canonical request with the doctor's key, verifies the signature against a key the doctor owns, and only then opens access. The doctor can see the patient's basic profile only (`GET /api/v1/emergency-access/patients/:patientId/basic-profile`), with its signature checks.
+
+The patient sees a red alert on their dashboard with the doctor, reason and time left, and can end it at once (`POST /api/v1/patients/me/emergency-access/:grantId/revoke`). Opening, viewing and ending glass-break access are written to the audit trail and anchored on-chain.
 
 Run automated API tests with `npm test`.
 

@@ -11,6 +11,14 @@ export class UserRepository {
     return result.rows[0] ?? null;
   }
 
+  async findByHealthId(healthId) {
+    const result = await this.database.query(
+      'SELECT id, name, email, role, status, patient_id, license_id, blockchain_address, medical_record_status FROM users WHERE UPPER(patient_id) = UPPER($1)',
+      [healthId]
+    );
+    return result.rows[0] ?? null;
+  }
+
   async findById(id) {
     const result = await this.database.query(
       'SELECT id, name, email, role, status, patient_id, license_id, blockchain_address, medical_record_status FROM users WHERE id = $1',

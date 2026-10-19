@@ -147,13 +147,6 @@ const prescriptionService = new PrescriptionService({
   signingKeyService
 });
 
-// Existing emergency/break-glass service: unchanged
-const emergencyAccessService = new EmergencyAccessService({
-  emergencyAccessRepository: new EmergencyAccessRepository(database),
-  userRepository,
-  medicalRecordRepository,
-  auditService
-});
 
 // Emergency profile access requests
 const emergencyProfileAccessRequestService =
@@ -179,6 +172,15 @@ const emergencyProfileService = new EmergencyProfileService({
 });
 
 // Administration
+// Glass-break: signed, time-limited access to the basic profile only.
+const emergencyAccessService = new EmergencyAccessService({
+  emergencyAccessRepository: new EmergencyAccessRepository(database),
+  userRepository,
+  emergencyProfileService,
+  signingKeyService,
+  auditService
+});
+
 const adminService = new AdminService({
   userRepository,
   auditRepository,

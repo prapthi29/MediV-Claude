@@ -503,16 +503,26 @@ export const api = {
 
   // ---------- emergency access ----------
 
-  grantEmergencyAccess: ({ patientId, reason, expiresAt }) =>
+  // Glass-break: the doctor's password signs the request; access opens once it verifies.
+  grantEmergencyAccess: ({ patientId, reason, durationMinutes, password }) =>
     request("/emergency-access", {
       method: "POST",
-      body: { patientId, reason, expiresAt },
-    }),
+      body: { patientId, reason, durationMinutes, password },
+    }).then((r) => r.emergencyAccess),
 
-  getEmergencyEssentialRecords: (patientId) =>
-    request(
-      `/emergency-access/patients/${patientId}/records`
-    ).then((r) => r.records),
+  getMyEmergencyGrants: () =>
+    request("/emergency-access").then((r) => r.grants || []),
+
+  viewEmergencyBasicProfile: (patientUserId) =>
+    request(`/emergency-access/patients/${patientUserId}/basic-profile`),
+
+  getEmergencyAccessOnMe: () =>
+    request("/patients/me/emergency-access").then((r) => r.grants || []),
+
+  revokeEmergencyAccess: (grantId) =>
+    request(`/patients/me/emergency-access/${grantId}/revoke`, {
+      method: "POST",
+    }).then((r) => r.grant),
 
   // ---------- audit ----------
 

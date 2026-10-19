@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import PortalShell from "../../../components/PortalShell";
+import TimeLeft from "../../../components/TimeLeft";
 import { StatCard, fmtDateTime } from "../../../components/ui";
 import { api } from "../../../lib/api";
 
@@ -15,6 +16,12 @@ const ACTION_LABEL = {
   basic_profile_created: "Basic profile created and signed",
   basic_profile_updated: "Basic profile updated and signed",
   record_created: "Record added",
+  record_version_created: "Record edited",
+  record_accessed: "Record viewed",
+  prescription_requested: "Prescription requested",
+  emergency_access_granted: "Emergency access opened",
+  emergency_profile_viewed: "Basic profile viewed in an emergency",
+  emergency_access_revoked: "Emergency access ended",
 };
 
 export default function PatientDashboard() {
@@ -25,6 +32,8 @@ export default function PatientDashboard() {
   const [prescriptionCount, setPrescriptionCount] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [storedUser, setStoredUser] = useState(null);
+  const [emergencies, setEmergencies] = useState([]);
+  const [revoking, setRevoking] = useState(null);
 
   useEffect(() => {
     setStoredUser(JSON.parse(window.localStorage.getItem("sch_user") || "null"));
@@ -32,12 +41,13 @@ export default function PatientDashboard() {
     let active = true;
     const refresh = async () => {
       if (document.visibilityState !== "visible") return;
-      const [profileRes, consentsRes, recordsRes, eventsRes, prescriptionsRes] = await Promise.all([
+      const [profileRes, consentsRes, recordsRes, eventsRes, prescriptionsRes, emergencyRes] = await Promise.all([
         api.getOwnEmergencyProfile().catch(() => null),
         api.getConsents().catch(() => []),
         api.getPatientRecords().catch(() => []),
         api.getMyAuditLog().catch(() => []),
         api.getPatientPrescriptions().catch(() => []),
+        api.getEmergencyAccessOnMe().catch(() => []),
       ]);
       if (!active) return;
       setProfile(profileRes);
@@ -45,6 +55,7 @@ export default function PatientDashboard() {
       setRecords(recordsRes);
       setEvents(eventsRes);
       setPrescriptionCount(prescriptionsRes.length);
+      setEmergencies(emergencyRes);
       setLoaded(true);
     };
     refresh();
@@ -55,6 +66,17 @@ export default function PatientDashboard() {
   }, []);
 
   const displayName = profile?.patientName || storedUser?.name || "";
+  const activeEmergencies = emergencies.filter((g) => g.status === "active");
+
+  async function endEmergency(grantId) {
+    setRevoking(grantId);
+    try {
+      await api.revokeEmergencyAccess(grantId);
+      setEmergencies((cur) => cur.map((g) => (g.id === grantId ? { ...g, status: "revoked" } : g)));
+    } finally {
+      setRevoking(null);
+    }
+  }
 
   return (
     <PortalShell
@@ -65,6 +87,24 @@ export default function PatientDashboard() {
     >
       {loaded && (
         <>
+          {activeEmergencies.map((g) => (
+            <div key={g.id} role="alert" className="card card-pad" style={{ marginBottom: 20, borderLeft: "4px solid var(--red)", background: "var(--red-tint)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                    Emergency access to your basic profile: {g.doctorName || "a doctor"}
+                    {g.doctorLicenseId ? ` (license ${g.doctorLicenseId})` : ""}
+                  </div>
+                  <div style={{ fontSize: 13 }}>
+                    Reason: “{g.reason}” · <TimeLeft until={g.expiresAt} />
+                  </div>
+                </div>
+                <button className="btn btn-danger" disabled={revoking === g.id} onClick={() => endEmergency(g.id)}>
+                  {revoking === g.id ? "Ending…" : "End access now"}
+                </button>
+              </div>
+            </div>
+          ))}
           <div className="card card-pad" style={{ marginBottom: 20, display: "flex", gap: 24, flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 4 }}>Your Health ID</div>

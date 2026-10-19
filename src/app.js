@@ -20,7 +20,7 @@ import {
   createPharmacyPrescriptionRouter,
   createPatientPrescriptionRouter
 } from './routes/prescription-routes.js';
-import { createEmergencyAccessRouter } from './routes/emergency-access-routes.js';
+import { createEmergencyAccessRouter, createPatientEmergencyAccessRouter } from './routes/emergency-access-routes.js';
 import {
   createEmergencyProfilePatientRouter,
   createEmergencyProfileDoctorRouter,
@@ -127,11 +127,18 @@ export function createApp({
     );
   }
 
-  // Existing emergency/break-glass workflow: unchanged
+  // Glass-break emergency access
   if (emergencyAccessService) {
     app.use(
       '/api/v1/emergency-access',
       createEmergencyAccessRouter(
+        authService,
+        emergencyAccessService
+      )
+    );
+    app.use(
+      '/api/v1/patients',
+      createPatientEmergencyAccessRouter(
         authService,
         emergencyAccessService
       )

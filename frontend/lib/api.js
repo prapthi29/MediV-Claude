@@ -334,10 +334,10 @@ export const api = {
       (r.consents || []).map(normalizeConsent)
     ),
 
-  grantConsent: (licenseId, expiresAt) =>
+  grantConsent: (licenseId) =>
     request("/consents", {
       method: "POST",
-      body: { licenseId, expiresAt },
+      body: { licenseId },
     }).then((r) => r.consent),
 
   revokeConsent: (doctorId) =>

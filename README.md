@@ -104,7 +104,7 @@ Phase 9 uses `ethers.js` to register each newly uploaded record's SHA-256 hash w
 
 ## Consent and doctor access
 
-Phase 10 adds expiry-bound patient consent. A patient grants a doctor by submitting `{ "doctorId": "UUID", "expiresAt": "ISO-8601 timestamp" }` to `POST /api/v1/consents`; both accounts must have wallet addresses. The backend records the consent and mirrors the expiry or revocation to the contract. Doctors receive only the records of patients with an active local consent that also verifies on-chain; expired or revoked consent is denied.
+Patient consent is a 30-minute license link. A patient links a doctor by submitting `{ "licenseId": "..." }` to `POST /api/v1/consents`; the server sets the expiry to 30 minutes from now (`CONSENT_DURATION_MINUTES` in `consent-service.js`), and the patient can revoke it sooner with `DELETE /api/v1/consents/:doctorId`. Once it lapses, the patient has to link the doctor again. Both accounts must have wallet addresses. The backend records the consent and mirrors the expiry or revocation to the contract. Doctors receive only the records of patients with an active local consent that also verifies on-chain; expired or revoked consent is denied.
 
 ## Signing keys
 

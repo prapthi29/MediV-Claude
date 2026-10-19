@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import PortalShell from "../../../components/PortalShell";
+import TimeLeft from "../../../components/TimeLeft";
 import { EmptyState, fmtDate } from "../../../components/ui";
 import { api } from "../../../lib/api";
 
@@ -138,7 +139,7 @@ export default function DoctorPatients() {
               <tr>
                 <th>Patient</th>
                 <th>Granted</th>
-                <th>Expires</th>
+                <th>Access left</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -167,11 +168,13 @@ export default function DoctorPatients() {
                         )}
                       </td>
 
-                      <td style={{ color: "var(--muted)" }}>
-                        {fmtDate(
-                          patient.expiresAt ||
+                      <td>
+                        <TimeLeft
+                          until={
+                            patient.expiresAt ||
                             patient.expires_at
-                        )}
+                          }
+                        />
                       </td>
 
                       <td style={{ whiteSpace: "nowrap" }}>

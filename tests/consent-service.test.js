@@ -189,12 +189,14 @@ describe('consent service', () => {
     const consent = await service.grantByLicense(
       'patient',
       ' med-test-001 ',
-      new Date(Date.now() + 60_000),
     );
 
     expect(consent.patientUserId).toBe('patient');
     expect(consent.doctorUserId).toBe('doctor');
-    expect(consent.expiresAt).toBeTruthy();
+    const minutesLeft =
+      (new Date(consent.expiresAt).getTime() - Date.now()) / 60_000;
+    expect(minutesLeft).toBeGreaterThan(29);
+    expect(minutesLeft).toBeLessThanOrEqual(30);
   });
 
   it('rejects an empty license ID', async () => {
@@ -204,7 +206,6 @@ describe('consent service', () => {
       service.grantByLicense(
         'patient',
         '   ',
-        new Date(Date.now() + 60_000),
       ),
     ).rejects.toMatchObject({
       code: 'LICENSE_REQUIRED',
@@ -223,7 +224,6 @@ describe('consent service', () => {
       service.grantByLicense(
         'patient',
         'UNKNOWN-LICENSE',
-        new Date(Date.now() + 60_000),
       ),
     ).rejects.toMatchObject({
       code: 'DOCTOR_LICENSE_NOT_FOUND',
@@ -235,9 +235,9 @@ describe('consent service', () => {
     const { service } = makeService();
 
     await expect(
-      service.grantByLicense(
+      service.grant(
         'patient',
-        'MED-TEST-001',
+        'doctor',
         new Date(Date.now() - 60_000),
       ),
     ).rejects.toMatchObject({
@@ -249,15 +249,12 @@ describe('consent service', () => {
   it('rejects duplicate active consent', async () => {
     const { service } = makeService();
 
-    const expiry = new Date(Date.now() + 60_000);
-
-    await service.grantByLicense('patient', 'MED-TEST-001', expiry);
+    await service.grantByLicense('patient', 'MED-TEST-001');
 
     await expect(
       service.grantByLicense(
         'patient',
         'MED-TEST-001',
-        new Date(Date.now() + 120_000),
       ),
     ).rejects.toMatchObject({
       code: 'CONSENT_EXISTS',
@@ -276,7 +273,6 @@ describe('consent service', () => {
       service.grantByLicense(
         'patient',
         'MED-TEST-001',
-        new Date(Date.now() + 60_000),
       ),
     ).rejects.toMatchObject({
       code: 'DOCTOR_LICENSE_NOT_FOUND',

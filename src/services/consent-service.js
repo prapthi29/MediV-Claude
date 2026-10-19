@@ -1,6 +1,10 @@
 
 import { AppError } from '../utils/app-error.js';
 
+// A license link is short-lived: the patient can revoke it early, and once it
+// lapses the doctor has to be linked again.
+export const CONSENT_DURATION_MINUTES = 30;
+
 export class ConsentService {
   constructor({
     consentRepository,
@@ -93,7 +97,7 @@ export class ConsentService {
     }));
   }
 
-  async grantByLicense(patientUserId, licenseId, expiresAt) {
+  async grantByLicense(patientUserId, licenseId) {
     if (typeof licenseId !== 'string' || !licenseId.trim()) {
       throw new AppError(
         400,
@@ -114,6 +118,8 @@ export class ConsentService {
         'DOCTOR_LICENSE_NOT_FOUND',
       );
     }
+
+    const expiresAt = new Date(Date.now() + CONSENT_DURATION_MINUTES * 60 * 1000);
 
     return this.grant(patientUserId, doctor.id, expiresAt);
   }

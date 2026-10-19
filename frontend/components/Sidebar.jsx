@@ -51,7 +51,7 @@ export default function Sidebar({ role, userLabel }) {
     admin: [
       { href: "/admin/dashboard", label: "Overview", icon: ICONS.overview },
       { href: "/admin/dashboard", label: "Pending approvals", icon: ICONS.approvals },
-      { href: "/admin/users", label: "All users", icon: ICONS.users },
+      { href: "/admin/users", label: "Doctors & pharmacies", icon: ICONS.users },
       { href: "/admin/audit-log", label: "Audit log", icon: ICONS.audit },
       { href: "/admin/chain-log", label: "Chain log", icon: ICONS.chain },
     ],

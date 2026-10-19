@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { AppError } from "../utils/app-error.js";
+import { SIGNING_ROLES } from "./signing-key-service.js";
 
 const PASSWORD_MIN_LENGTH = 12;
 
@@ -31,8 +32,9 @@ function validatePassword(password) {
 }
 
 export class AuthService {
-  constructor({ userRepository, jwtSecret, jwtExpiresIn }) {
+  constructor({ userRepository, jwtSecret, jwtExpiresIn, signingKeyService }) {
     this.userRepository = userRepository;
+    this.signingKeyService = signingKeyService;
     this.jwtSecret = jwtSecret;
     this.jwtExpiresIn = jwtExpiresIn;
   }
@@ -88,10 +90,16 @@ export class AuthService {
         ? "pending"
         : "active";
 
-    // This generates an address identifier; it does not create
-    // or verify an on-chain wallet.
+    // Doctors and pharmacies get a password-locked ECDSA signing key whose
+    // address is their blockchain identity. Patients never sign, so they get
+    // an address identifier only.
+    const signingKey =
+      SIGNING_ROLES.includes(role) && this.signingKeyService
+        ? await this.signingKeyService.generate(password)
+        : null;
+
     const blockchainAddress =
-      `0x${crypto.randomBytes(20).toString("hex")}`;
+      signingKey?.address ?? `0x${crypto.randomBytes(20).toString("hex")}`;
 
     const user = await this.userRepository.create({
       name:
@@ -105,6 +113,15 @@ export class AuthService {
       blockchainAddress,
       licenseId: normalizedLicenseId || null,
     });
+
+    if (signingKey) {
+      try {
+        await this.signingKeyService.store(user.id, signingKey);
+      } catch (error) {
+        // Login creates the key if storing it here failed.
+        console.error("Signing key could not be stored at registration:", error.message);
+      }
+    }
 
     return {
       user: this.publicUser(user),
@@ -154,6 +171,9 @@ export class AuthService {
         "ACCOUNT_REJECTED"
       );
     }
+
+    const signingKey = await this.signingKeyService?.ensureKey(user, password);
+    if (signingKey) user.blockchain_address = signingKey.address;
 
     return {
       user: this.publicUser(user),

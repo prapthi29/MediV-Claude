@@ -13,7 +13,7 @@ export default function AdminDashboard() {
     api.getPendingApprovals().then(setPending);
     api.getAllUsers().then((users) => {
       setCounts({
-        total: users.length,
+        total: users.filter((u) => u.role !== "admin").length,
         doctors: users.filter((u) => u.role === "doctor" && u.approval_status === "active").length,
         pharmacies: users.filter((u) => u.role === "pharmacy" && u.approval_status === "active").length,
       });
@@ -45,14 +45,14 @@ export default function AdminDashboard() {
           <StatCard label="Pending approvals" value={pending ? pending.length : "—"} icon={<Dot color="var(--amber)" />} />
           <StatCard label="Approved doctors" value={counts.doctors} icon={<Dot color="var(--primary)" />} />
           <StatCard label="Approved pharmacies" value={counts.pharmacies} icon={<Dot color="var(--primary)" />} />
-          <StatCard label="Total accounts" value={counts.total} icon={<Dot color="var(--muted)" />} />
+          <StatCard label="Doctor and pharmacy accounts" value={counts.total} icon={<Dot color="var(--muted)" />} />
         </div>
       )}
 
       <div className="card card-pad" style={{ marginBottom: 8 }}>
         <h3 style={{ fontSize: 15, margin: "0 0 4px" }}>Pending approvals</h3>
         <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "0 0 14px" }}>
-          Reviewing a license identifies who's asking to join — it does not grant them access to any patient data.
+          Check the license before approving. Approval activates the account and its signing key; it never grants access to patient data.
         </p>
 
         {pending && pending.length === 0 && (

@@ -1,10 +1,11 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { getAddress, getBytes, verifyMessage } from 'ethers';
 import { AppError } from '../utils/app-error.js';
+import { SigningKeyService } from './signing-key-service.js';
 
 export class PrescriptionService {
-  constructor({ prescriptionRepository, medicalStorage, fileEncryptionService, userRepository, consentService, recordRegistryClient, auditService }) {
+  constructor({ prescriptionRepository, medicalStorage, fileEncryptionService, userRepository, consentService, recordRegistryClient, auditService, signingKeyService }) {
+    this.signingKeyService = signingKeyService;
     this.prescriptionRepository = prescriptionRepository;
     this.medicalStorage = medicalStorage;
     this.fileEncryptionService = fileEncryptionService;
@@ -14,13 +15,14 @@ export class PrescriptionService {
     this.auditService = auditService;
   }
 
-  async create(doctorUserId, patientUserId, file, { title, signature }) {
+  async create(doctorUserId, patientUserId, file, { title, password }) {
     if (!file) throw new AppError(400, 'A prescription document is required.', 'FILE_REQUIRED');
     await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
-    const doctor = await this.userRepository.findById(doctorUserId);
     const contentSha256 = this.createSha256(file.buffer);
-    if (!this.isDoctorSignatureValid(contentSha256, signature, doctor.blockchain_address)) {
-      throw new AppError(400, 'Prescription signature does not match the doctor wallet.', 'INVALID_PRESCRIPTION_SIGNATURE');
+    // The doctor's password unlocks their ECDSA key; the server never signs without it.
+    const { signature, signerAddress } = await this.signingKeyService.signDigest(doctorUserId, password, contentSha256);
+    if (!this.isDoctorSignatureValid(contentSha256, signature, signerAddress)) {
+      throw new AppError(500, 'The prescription signature could not be verified after signing.', 'INVALID_PRESCRIPTION_SIGNATURE');
     }
     const storageKey = this.createStorageKey(patientUserId, file.originalname);
     const encryption = this.fileEncryptionService.encrypt(file.buffer);
@@ -29,7 +31,7 @@ export class PrescriptionService {
     try {
       let prescription = await this.prescriptionRepository.create({
         patientUserId, doctorUserId, storageKey, originalFilename: file.originalname, contentType: file.mimetype,
-        sizeBytes: file.size, title, contentSha256, doctorSignature: signature, encryption
+        sizeBytes: file.size, title, contentSha256, doctorSignature: signature, signerAddress, encryption
       });
       persisted = true;
       prescription = await this.registerOnChain(prescription);
@@ -64,8 +66,7 @@ export class PrescriptionService {
   async verifyForPharmacy(prescriptionId, pharmacyUserId) {
     const prescription = await this.prescriptionRepository.findById(prescriptionId);
     if (!prescription) throw new AppError(404, 'Prescription not found.', 'PRESCRIPTION_NOT_FOUND');
-    const doctor = await this.userRepository.findById(prescription.doctor_user_id);
-    const signatureValid = this.isDoctorSignatureValid(prescription.content_sha256, prescription.doctor_signature, doctor?.blockchain_address);
+    const signatureValid = await this.isPrescriptionSignatureValid(prescription);
     let contentHashValid = false;
    try {
     const stored = await this.medicalStorage.get({
@@ -122,7 +123,20 @@ export class PrescriptionService {
   }
 
   isDoctorSignatureValid(contentSha256, signature, doctorAddress) {
-    try { return !!doctorAddress && getAddress(verifyMessage(getBytes(`0x${contentSha256}`), signature)) === getAddress(doctorAddress); } catch { return false; }
+    return SigningKeyService.verifyDigest(contentSha256, signature, doctorAddress);
+  }
+
+  // The signature must come from the stored signer address, and that address must be
+  // one of the issuing doctor's keys. Older prescriptions have no signer address and
+  // are checked against the doctor's current address.
+  async isPrescriptionSignatureValid(prescription) {
+    if (prescription.signer_address) {
+      const ownedByDoctor = await this.signingKeyService?.isKeyOfUser(prescription.signer_address, prescription.doctor_user_id);
+      return Boolean(ownedByDoctor) &&
+        this.isDoctorSignatureValid(prescription.content_sha256, prescription.doctor_signature, prescription.signer_address);
+    }
+    const doctor = await this.userRepository.findById(prescription.doctor_user_id);
+    return this.isDoctorSignatureValid(prescription.content_sha256, prescription.doctor_signature, doctor?.blockchain_address);
   }
 
   createSha256(buffer) { return crypto.createHash('sha256').update(buffer).digest('hex'); }

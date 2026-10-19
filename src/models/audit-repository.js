@@ -1,4 +1,6 @@
 
+const ACCOUNT_EVENT_TYPES = ['user_approved', 'user_rejected', 'signing_key_created'];
+
 export class AuditRepository {
   constructor(database) {
     this.database = database;
@@ -87,7 +89,9 @@ export class AuditRepository {
     return result.rows;
   }
 
-  async listAll({ limit = 200 } = {}) {
+  // Admin view: account events about doctors, pharmacies and admins only.
+  // Events whose subject is a patient never reach the admin.
+  async listAccountEvents({ limit = 200 } = {}) {
     const safeLimit = Math.max(
       1,
       Math.min(Number.parseInt(limit, 10) || 200, 1000)
@@ -105,9 +109,11 @@ export class AuditRepository {
         blockchain_tx_hash,
         created_at
       FROM audit_events
+      WHERE event_type = ANY($2)
+        AND subject_user_id IN (SELECT id FROM users WHERE role <> 'patient')
       ORDER BY created_at DESC
       LIMIT $1`,
-      [safeLimit]
+      [safeLimit, ACCOUNT_EVENT_TYPES]
     );
 
     return result.rows;

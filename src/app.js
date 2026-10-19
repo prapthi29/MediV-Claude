@@ -42,7 +42,8 @@ export function createApp({
   emergencyProfileService,
   emergencyProfileAccessRequestService,
   auditRepository,
-  adminService
+  adminService,
+  signingKeyService
 }) {
   const app = express();
 
@@ -72,7 +73,7 @@ export function createApp({
   if (walletService) {
     app.use(
       '/api/v1/account',
-      createAccountRouter(authService, walletService)
+      createAccountRouter(authService, walletService, signingKeyService)
     );
   }
 

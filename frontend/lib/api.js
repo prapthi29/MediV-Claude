@@ -198,6 +198,9 @@ export const api = {
       body: { blockchainAddress },
     }),
 
+  getSigningKey: () =>
+    request("/account/signing-key").then((r) => r.signingKey),
+
   setAccountWallet: (blockchainAddress) =>
     request("/account/wallet", {
       method: "PUT",
@@ -361,12 +364,13 @@ export const api = {
 
   // ---------- prescriptions ----------
 
-  createPrescription: ({ patientId, title, signature, file }) => {
+  // The doctor's password unlocks their signing key on the server for this one signature.
+  createPrescription: ({ patientId, title, password, file }) => {
     const form = new FormData();
 
     form.append("document", file);
     form.append("patientId", patientId);
-    form.append("signature", signature);
+    form.append("password", password);
 
     if (title) {
       form.append("title", title);

@@ -9,7 +9,7 @@ export default function NewPrescription() {
   const [patients, setPatients] = useState(null);
   const [patientId, setPatientId] = useState("");
   const [title, setTitle] = useState("");
-  const [signature, setSignature] = useState("");
+  const [password, setPassword] = useState("");
   const [file, setFile] = useState(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -31,19 +31,18 @@ export default function NewPrescription() {
     if (!patientId)
       return setError("Choose a patient you have active access for.");
     if (!file) return setError("Attach the prescription document.");
-    if (!signature.trim())
-      return setError(
-        "A wallet signature over the file's SHA-256 hash is required.",
-      );
+    if (!password)
+      return setError("Enter your password to sign the prescription.");
     setSubmitting(true);
     try {
       const res = await api.createPrescription({
         patientId,
         title: title.trim() || undefined,
-        signature: signature.trim(),
+        password,
         file,
       });
       setResult(res);
+      setPassword("");
     } catch (err) {
       setError(
         err.message ||
@@ -59,7 +58,7 @@ export default function NewPrescription() {
       role="doctor"
       eyebrow="Doctor Portal"
       title="Issue prescription"
-      subtitle="Upload the signed prescription document. Your wallet signature over its hash is what a pharmacy verifies."
+      subtitle="Upload the prescription document and sign it with your MediVault signing key. A pharmacy verifies that signature."
     >
       <div className="grid grid-2">
         <form className="card card-pad" onSubmit={handleSubmit}>
@@ -99,16 +98,16 @@ export default function NewPrescription() {
           </div>
 
           <div className="field">
-            <label>Wallet signature</label>
+            <label>Your password (to sign)</label>
             <input
-              className="mono"
-              value={signature}
-              onChange={(e) => setSignature(e.target.value)}
-              placeholder="0x…"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
             />
             <div className="field-hint">
-              Sign the SHA-256 hash of the document with your wallet (e.g.
-              MetaMask) and paste the signature here.
+              Your password unlocks your signing key for this one signature.
+              MediVault cannot sign for you without it.
             </div>
           </div>
 
@@ -125,7 +124,7 @@ export default function NewPrescription() {
               marginTop: 6,
             }}
           >
-            {submitting ? "Issuing…" : "Issue prescription"}
+            {submitting ? "Signing…" : "Sign and issue prescription"}
           </button>
         </form>
 
@@ -142,7 +141,7 @@ export default function NewPrescription() {
               lineHeight: 1.8,
             }}
           >
-            <li>Your signature is checked against your wallet address</li>
+            <li>The document's SHA-256 hash is signed with your ECDSA key</li>
             <li>The file is encrypted (AES-256-GCM) and stored off-chain</li>
             <li>Its hash is registered on-chain</li>
           </ol>

@@ -13,6 +13,9 @@ const ACTION_TONE = {
   "consent.revoke": "badge-amber",
   "user.approve": "badge-mint",
   "user.reject": "badge-red",
+  user_approved: "badge-mint",
+  user_rejected: "badge-red",
+  signing_key_created: "badge-muted",
 };
 
 export default function AuditLog() {
@@ -23,7 +26,7 @@ export default function AuditLog() {
   }, []);
 
   return (
-    <PortalShell role="admin" eyebrow="Admin Portal" title="Audit log" subtitle="Every sensitive action — who did what, to what, and when.">
+    <PortalShell role="admin" eyebrow="Admin Portal" title="Audit log" subtitle="Doctor and pharmacy account activity. Patient activity is visible only to the patient.">
       <div className="card">
         <table>
           <thead>

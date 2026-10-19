@@ -106,9 +106,19 @@ Phase 9 uses `ethers.js` to register each newly uploaded record's SHA-256 hash w
 
 Phase 10 adds expiry-bound patient consent. A patient grants a doctor by submitting `{ "doctorId": "UUID", "expiresAt": "ISO-8601 timestamp" }` to `POST /api/v1/consents`; both accounts must have wallet addresses. The backend records the consent and mirrors the expiry or revocation to the contract. Doctors receive only the records of patients with an active local consent that also verifies on-chain; expired or revoked consent is denied.
 
+## Signing keys
+
+Every doctor and pharmacy gets an ECDSA (secp256k1) signing key when they register. Its address becomes their blockchain address. The private key is encrypted with AES-256-GCM under a key derived from the account password (scrypt), so the server cannot sign for anyone without their password. Accounts created before signing keys existed get one at their next login. `GET /api/v1/account/signing-key` returns the active key's address. Doctor and pharmacy addresses cannot be changed through `PUT /api/v1/account/wallet`.
+
+Signatures are Ethereum personal-sign signatures over the raw 32-byte SHA-256 digest, so anyone can check them with `ethers.verifyMessage`.
+
+## Admin scope
+
+Admins approve or reject doctor and pharmacy accounts only. Their user list and audit log contain only doctors, pharmacies and admins, and only account events (`user_approved`, `user_rejected`, `signing_key_created`). Patient accounts and patient-related events are not visible to admins.
+
 ## Prescription verification
 
-Phase 11 accepts a doctor-only multipart `document` upload alongside `patientId`, optional `title`, and an Ethereum `signature`. The doctor signs the raw 32-byte SHA-256 digest using their registered wallet; the backend validates that signature, encrypts the document, and registers the digest on-chain. A pharmacy uses the verification endpoint and receives only validity results and non-sensitive issuance metadata—never the prescription file.
+The doctor uploads the prescription document (multipart `document`) with `patientId`, an optional `title`, and their account `password`. The backend uses the password to unlock the doctor's signing key, signs the document's SHA-256 digest, stores the signature and signer address, encrypts the document, and registers the digest on-chain. A pharmacy uses the verification endpoint and receives only validity results and non-sensitive issuance metadata—never the prescription file.
 
 ## Emergency access and audit trail
 

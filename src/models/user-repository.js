@@ -51,15 +51,17 @@ export class UserRepository {
 
   async listPending() {
     const result = await this.database.query(
-      `SELECT id, name, email, role, status, created_at FROM users
+      `SELECT id, name, email, role, status, license_id, blockchain_address, created_at FROM users
        WHERE status = 'pending' ORDER BY created_at ASC`
     );
     return result.rows;
   }
 
-  async listAll({ limit = 200 } = {}) {
+  // Admin directory: doctors, pharmacies and admins only. Patient accounts are not listed.
+  async listNonPatients({ limit = 200 } = {}) {
     const result = await this.database.query(
-      `SELECT id, name, email, role, status, created_at FROM users
+      `SELECT id, name, email, role, status, license_id, blockchain_address, created_at FROM users
+       WHERE role <> 'patient'
        ORDER BY created_at DESC LIMIT $1`,
       [limit]
     );

@@ -5,15 +5,15 @@ const patientId = z.string().uuid();
 const createMetadata = z.object({
   patientId,
   title: z.string().trim().min(1).max(200).optional(),
-  signature: z.string().trim().min(1).max(1024)
+  password: z.string().min(1).max(128)
 }).strict();
 const prescriptionId = z.object({ prescriptionId: z.string().uuid() });
 
 export function createPrescriptionController(prescriptionService) {
   return {
     create: asyncHandler(async (req, res) => {
-      const { patientId: patientUserId, title, signature } = createMetadata.parse(req.body);
-      const prescription = await prescriptionService.create(req.user.sub, patientUserId, req.file, { title, signature });
+      const { patientId: patientUserId, title, password } = createMetadata.parse(req.body);
+      const prescription = await prescriptionService.create(req.user.sub, patientUserId, req.file, { title, password });
       res.status(201).json({ prescription });
     }),
     listForPatient: asyncHandler(async (req, res) => {

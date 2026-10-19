@@ -20,6 +20,7 @@ import { RecordCreationApprovalRepository } from './models/record-creation-appro
 import { RecordUpdateApprovalRepository } from './models/record-update-approval-repository.js';
 import { MedicalRecordVersionRepository } from './models/medical-record-version-repository.js';
 import { EmergencyProfileAccessRequestRepository } from './models/emergency-profile-access-request-repository.js';
+import { SigningKeyRepository } from './models/signing-key-repository.js';
 
 // Services
 import { AuthService } from './services/auth-service.js';
@@ -34,6 +35,7 @@ import { EmergencyAccessService } from './services/emergency-access-service.js';
 import { EmergencyProfileService } from './services/emergency-profile-service.js';
 import { EmergencyProfileAccessRequestService } from './services/emergency-profile-access-request-service.js';
 import { AdminService } from './services/admin-service.js';
+import { SigningKeyService } from './services/signing-key-service.js';
 
 const config = loadEnv();
 const database = createDatabase(config);
@@ -54,11 +56,17 @@ const medicalRecordVersionRepository = new MedicalRecordVersionRepository(databa
 const emergencyProfileAccessRequestRepository =
   new EmergencyProfileAccessRequestRepository(database);
 
-// Authentication
+// Authentication and signing keys (the audit service is attached once it exists)
+const signingKeyService = new SigningKeyService({
+  signingKeyRepository: new SigningKeyRepository(database),
+  userRepository
+});
+
 const authService = new AuthService({
   userRepository,
   jwtSecret: config.JWT_SECRET,
-  jwtExpiresIn: config.JWT_EXPIRES_IN
+  jwtExpiresIn: config.JWT_EXPIRES_IN,
+  signingKeyService
 });
 
 // Patient profiles
@@ -94,6 +102,8 @@ const auditService = new AuditService({
   userRepository,
   recordRegistryClient
 });
+
+signingKeyService.auditService = auditService;
 
 // Consent service
 const consentRepository = new ConsentRepository(database);
@@ -138,7 +148,8 @@ const prescriptionService = new PrescriptionService({
   userRepository,
   consentService,
   recordRegistryClient,
-  auditService
+  auditService,
+  signingKeyService
 });
 
 // Existing emergency/break-glass service: unchanged
@@ -188,7 +199,8 @@ const app = createApp({
   emergencyProfileService,
   emergencyProfileAccessRequestService,
   auditRepository,
-  adminService
+  adminService,
+  signingKeyService
 });
 
 // Start server

@@ -8,14 +8,17 @@ import { api } from "../../../lib/api";
 export default function DoctorDashboard() {
   const [patients, setPatients] = useState(null);
   const [licenseId, setLicenseId] = useState(null);
+  const [signingKey, setSigningKey] = useState(null);
 
   useEffect(() => {
     api.getDoctorPatients().then(setPatients);
+    api.getSigningKey().then(setSigningKey).catch(() => setSigningKey(null));
 
     // Read the doctor's license ID from the session.
     try {
       const stored = JSON.parse(window.localStorage.getItem("sch_user") || "null");
-      if (stored?.license_id) setLicenseId(stored.license_id);
+      const storedLicense = stored?.licenseId || stored?.license_id;
+      if (storedLicense) setLicenseId(storedLicense);
     } catch {
       // Ignore malformed or missing localStorage value.
     }
@@ -37,6 +40,15 @@ export default function DoctorDashboard() {
         <StatCard label="Active patients" value={activeCount} icon={<Dot color="var(--primary)" />} />
         <StatCard label="Records you've added" value={recordsCount} icon={<Dot color="var(--mint)" />} />
         <StatCard label="License" value={<span className="mono" style={{ fontSize: 15 }}>{licenseId || "—"}</span>} icon={<Dot color="var(--muted)" />} />
+        <StatCard
+          label="Signing key"
+          value={
+            <span className="mono" style={{ fontSize: 15 }} title={signingKey?.address || ""}>
+              {signingKey ? `${signingKey.address.slice(0, 6)}…${signingKey.address.slice(-4)}` : "—"}
+            </span>
+          }
+          icon={<Dot color="var(--primary)" />}
+        />
       </div>
 
       <div className="card card-pad">

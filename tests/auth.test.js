@@ -50,8 +50,9 @@ class MemoryUsers {
       .map((user) => this.publicUser(user));
   }
 
-  async listAll() {
+  async listNonPatients() {
     return [...this.users]
+      .filter((user) => user.role !== 'patient')
       .reverse()
       .map((user) => this.publicUser(user));
   }
@@ -96,7 +97,7 @@ class MemoryAudit {
     return event;
   }
 
-  async listAll() {
+  async listAccountEvents() {
     return this.events;
   }
 }

@@ -7,15 +7,24 @@ export class AdminService {
     this.auditService = auditService;
   }
 
+  // Admins decide on doctor and pharmacy accounts only; patients are outside their reach.
+  async requireProfessional(targetUserId) {
+    const user = await this.userRepository.findById(targetUserId);
+    if (!user || !['doctor', 'pharmacy'].includes(user.role)) {
+      throw new AppError(404, 'Doctor or pharmacy account not found.', 'USER_NOT_FOUND');
+    }
+  }
+
   async listPendingUsers() {
     return this.userRepository.listPending();
   }
 
   async listAllUsers() {
-    return this.userRepository.listAll();
+    return this.userRepository.listNonPatients();
   }
 
   async approveUser(adminUserId, targetUserId) {
+    await this.requireProfessional(targetUserId);
     const user = await this.userRepository.setStatus(targetUserId, 'active');
     if (!user) throw new AppError(404, 'User not found.', 'USER_NOT_FOUND');
     await this.auditService?.record({
@@ -30,6 +39,7 @@ export class AdminService {
   }
 
   async rejectUser(adminUserId, targetUserId) {
+    await this.requireProfessional(targetUserId);
     const user = await this.userRepository.setStatus(targetUserId, 'rejected');
     if (!user) throw new AppError(404, 'User not found.', 'USER_NOT_FOUND');
     await this.auditService?.record({
@@ -44,6 +54,6 @@ export class AdminService {
   }
 
   async listAllAuditEvents() {
-    return this.auditRepository.listAll();
+    return this.auditRepository.listAccountEvents();
   }
 }

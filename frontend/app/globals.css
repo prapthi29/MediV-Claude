@@ -1,0 +1,490 @@
+﻿@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #F5FAF8;
+  --surface: #FFFFFF;
+  --surface-2: #EDF6F2;
+  --ink: #16302C;
+  --muted: #5D7A75;
+  --border: #DCEAE6;
+  --primary: #0E7C7B;
+  --primary-dark: #0A5F5E;
+  --primary-tint: #E3F3F1;
+  --amber: #B9791A;
+  --amber-tint: #FBF1DE;
+  --red: #B34A3F;
+  --red-tint: #FBEAE7;
+  --mint: #2E8B57;
+  --mint-tint: #E4F5EA;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(22,48,44,0.04), 0 6px 20px rgba(22,48,44,0.06);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  padding: 0;
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .display {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+a { color: inherit; text-decoration: none; }
+
+.mono {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+button { font-family: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* ---------- layout shell ---------- */
+
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 232px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 20px 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand-mark {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  background: linear-gradient(155deg, var(--primary), var(--primary-dark));
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+.brand-name {
+  font-family: 'Fraunces', serif;
+  font-size: 15px;
+  line-height: 1.15;
+  color: var(--ink);
+}
+.brand-name small { display:block; font-family:'Inter',sans-serif; font-size:11px; color: var(--muted); font-weight: 500; }
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.nav-link:hover { background: var(--surface-2); color: var(--ink); }
+.nav-link.active { background: var(--primary-tint); color: var(--primary-dark); }
+
+.sidebar-foot {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  padding: 28px 36px 56px;
+}
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.eyebrow {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary);
+  margin: 0 0 4px;
+}
+
+.page-title { font-size: 25px; margin: 0; }
+.page-sub { color: var(--muted); font-size: 13.5px; margin-top: 4px; }
+
+/* ---------- cards / grid ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.card-pad { padding: 20px 22px; }
+
+.grid { display: grid; gap: 16px; }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-2 { grid-template-columns: 1.4fr 1fr; }
+
+@media (max-width: 980px) {
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .main { padding: 20px; }
+}
+
+.stat-label { font-size: 12px; color: var(--muted); font-weight: 500; }
+.stat-value { font-family: 'Fraunces', serif; font-size: 30px; margin-top: 6px; }
+.stat-icon {
+  width: 34px; height: 34px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--primary-tint); margin-bottom: 12px;
+}
+
+/* ---------- table ---------- */
+
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+thead th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 0 14px 10px;
+  border-bottom: 1px solid var(--border);
+}
+tbody td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--surface-2); }
+
+/* ---------- badges & buttons ---------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.badge-mint { background: var(--mint-tint); color: var(--mint); }
+.badge-amber { background: var(--amber-tint); color: var(--amber); }
+.badge-red { background: var(--red-tint); color: var(--red); }
+.badge-muted { background: var(--surface-2); color: var(--muted); }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform .08s ease, box-shadow .08s ease;
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-ghost { background: transparent; border-color: var(--border); color: var(--ink); }
+.btn-ghost:hover { background: var(--surface-2); }
+.btn-danger { background: var(--red-tint); color: var(--red); }
+.btn-danger:hover { filter: brightness(0.95); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---------- verification chip: the signature element ----------
+   A "specimen label" for anything hashed/signed on-chain: mono hash,
+   a live pulse dot, and a stamped check. Used on records, prescriptions,
+   and the admin chain log so tamper-evidence is always visually legible. */
+
+.verify-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 8px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 11.5px;
+}
+.verify-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--mint);
+  box-shadow: 0 0 0 0 rgba(46,139,87,0.5);
+  animation: pulse 2.2s infinite;
+  flex-shrink: 0;
+}
+.verify-chip.stale .verify-dot { background: var(--red); animation: none; }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(46,139,87,0.45); }
+  70% { box-shadow: 0 0 0 6px rgba(46,139,87,0); }
+  100% { box-shadow: 0 0 0 0 rgba(46,139,87,0); }
+}
+.verify-hash { color: var(--muted); }
+.verify-tx { color: var(--primary-dark); font-weight: 600; }
+
+/* ---------- forms ---------- */
+
+.field { margin-bottom: 14px; }
+.field label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--ink);
+}
+.field input, .field select, .field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-family: inherit;
+  background: var(--surface);
+  color: var(--ink);
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  border-color: var(--primary);
+}
+.field-hint { font-size: 11.5px; color: var(--muted); margin-top: 5px; }
+.error-text { font-size: 12.5px; color: var(--red); margin-top: 8px; }
+
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+@media (max-width: 860px) { .auth-shell { grid-template-columns: 1fr; } }
+.auth-visual {
+  background: linear-gradient(165deg, var(--primary-dark), var(--primary));
+  color: #fff;
+  padding: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.auth-form-col {
+  display: flex; align-items: center; justify-content: center; padding: 32px;
+}
+.auth-card { width: 100%; max-width: 380px; }
+
+.empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--muted);
+}
+
+/* Patient emergency medical profile */
+.emergency-page {
+  width: min(calc(100% - 32px), 1000px);
+  margin: 0 auto;
+  padding: 32px 0 48px;
+  color: var(--ink, #172033);
+}
+
+.emergency-back-link {
+  color: var(--primary, #2459a9);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.emergency-page-header {
+  margin: 26px 0 22px;
+}
+
+.emergency-eyebrow {
+  color: var(--primary, #2459a9);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+
+.emergency-page-header h1 {
+  margin: 8px 0;
+  font-size: clamp(26px, 4vw, 36px);
+}
+
+.emergency-page-header > p:last-child {
+  color: var(--muted, #64748b);
+  line-height: 1.7;
+  max-width: 720px;
+}
+
+.emergency-notice,
+.emergency-alert {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 16px 18px;
+  margin: 20px 0;
+  border: 1px solid #d6e2f2;
+  border-radius: 12px;
+  background: #f4f8fd;
+  line-height: 1.6;
+}
+
+.emergency-card,
+.emergency-empty {
+  margin: 16px 0;
+  padding: 22px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 14px;
+}
+
+.emergency-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.emergency-card-heading h2,
+.emergency-empty h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.emergency-overview,
+.emergency-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 20px;
+}
+
+.emergency-overview > div,
+.emergency-details-grid > div {
+  min-width: 0;
+}
+
+.emergency-field-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted, #64748b);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.emergency-overview strong,
+.emergency-details-grid p {
+  overflow-wrap: anywhere;
+}
+
+.emergency-details-grid p {
+  margin: 0;
+}
+
+.emergency-blood-group {
+  font-size: 23px;
+}
+
+.emergency-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #eef2f7;
+  color: #475569;
+}
+
+.emergency-status-none_known {
+  background: #e8f6ee;
+  color: #17663a;
+}
+
+.emergency-status-provided {
+  background: #eaf1ff;
+  color: #234e9b;
+}
+
+.emergency-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.emergency-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  overflow-wrap: anywhere;
+}
+
+.emergency-list li span,
+.emergency-muted,
+.emergency-page-footer {
+  color: var(--muted, #64748b);
+  line-height: 1.65;
+}
+
+.emergency-page-footer {
+  margin-top: 26px;
+  font-size: 13px;
+}
+
+.emergency-empty p {
+  line-height: 1.7;
+  color: var(--muted, #64748b);
+}
+
+@media (max-width: 600px) {
+  .emergency-page {
+    width: min(calc(100% - 24px), 1000px);
+    padding-top: 22px;
+  }
+
+  .emergency-card,
+  .emergency-empty {
+    padding: 16px;
+  }
+}
+

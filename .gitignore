@@ -1,0 +1,32 @@
+﻿node_modules/
+uploads/
+*.log
+.env
+.env.local
+.next/
+.DS_Store
+*.pdf
+*.txt
+test-*.jpg
+demo-record.pdf
+
+
+# Local secrets, backups, and generated files
+.env
+.env.*
+!.env.example
+*.dump
+*.backup
+node_modules/
+frontend/.next/
+coverage/
+
+# Additional local secrets and generated files
+frontend/.env.local
+*.pem
+*.key
+*.dump
+*.backup
+# Hardhat generated files
+blockchain/artifacts/
+blockchain/cache/

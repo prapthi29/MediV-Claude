@@ -1,0 +1,531 @@
+﻿
+const BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
+
+function authHeaders() {
+  if (typeof window === "undefined") return {};
+
+  const token = window.localStorage.getItem("sch_token");
+
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function normalizeUser(user) {
+  const status = user.status || user.approval_status || "active";
+
+  return {
+    ...user,
+    name: user.name || user.email,
+    status,
+    approval_status: status,
+    health_id: user.health_id || "",
+    license_id: user.license_id || "",
+    created_at: user.created_at || user.createdAt,
+  };
+}
+
+function normalizeAuditEvent(event) {
+  return {
+    ...event,
+    actor:
+      event.actor ||
+      event.actor_user_id ||
+      event.actorUserId ||
+      "system",
+    action: event.action || event.event_type || event.eventType,
+    target:
+      event.target ||
+      [
+        event.resource_type || event.resourceType,
+        event.resource_id || event.resourceId,
+      ]
+        .filter(Boolean)
+        .join(" ") ||
+      "platform",
+    at: event.at || event.created_at || event.createdAt,
+  };
+}
+
+function normalizeConsent(consent) {
+  return {
+    ...consent,
+    id: consent.id || consent.doctorUserId,
+    doctor_name: consent.doctor_name || consent.doctorEmail,
+    doctor_email: consent.doctor_email || consent.doctorEmail,
+    license_id: consent.license_id || consent.licenseId || "",
+    doctor_name: consent.doctor_name || consent.doctorName || "",
+    status: consent.status || "active",
+    granted_at: consent.granted_at || consent.createdAt,
+    expires_at: consent.expires_at || consent.expiresAt,
+  };
+}
+
+function normalizeDoctorPatient(patient) {
+  return {
+    ...patient,
+    id: patient.id || patient.patientUserId,
+    name: patient.name || patient.patientName || patient.patientEmail,
+    health_id: patient.health_id || patient.patientUserId,
+    records_count: patient.records_count || 0,
+    last_visit: patient.last_visit || patient.createdAt,
+    granted_at: patient.granted_at || patient.createdAt,
+  };
+}
+
+function handleExpiredSession(status, code) {
+  if (status !== 401 || !["AUTH_REQUIRED", "INVALID_TOKEN"].includes(code)) return;
+  if (typeof window === "undefined" || !window.localStorage.getItem("sch_token")) return;
+  window.localStorage.removeItem("sch_token");
+  window.localStorage.removeItem("sch_user");
+  if (!window.location.pathname.startsWith("/login") && !window.location.pathname.startsWith("/register")) {
+    window.location.replace("/login?session=expired");
+  }
+}
+
+async function request(path, { method = "GET", body } = {}) {
+  const isFormData =
+    typeof FormData !== "undefined" && body instanceof FormData;
+
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers: isFormData
+      ? authHeaders()
+      : {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
+    body: isFormData
+      ? body
+      : body
+        ? JSON.stringify(body)
+        : undefined,
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const err = new Error(
+      data?.error?.message || `Request failed: ${res.status}`
+    );
+
+    err.status = res.status;
+    err.code = data?.error?.code;
+    err.details = data?.error?.details;
+    handleExpiredSession(res.status, err.code);
+
+    throw err;
+  }
+
+  return data;
+}
+
+async function downloadFile(path, filename) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: authHeaders(),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+
+    const err = new Error(
+      data?.error?.message || `Download failed: ${res.status}`
+    );
+
+    err.status = res.status;
+    err.code = data?.error?.code;
+    handleExpiredSession(res.status, err.code);
+
+    throw err;
+  }
+
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+
+  a.href = url;
+  a.download = filename || "download";
+
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  window.URL.revokeObjectURL(url);
+}
+
+export const api = {
+  // ---------- authentication ----------
+
+  register: ({ name, email, password, role, licenseId }) =>
+    request("/auth/register", {
+      method: "POST",
+      body: { name, email, password, role, ...(licenseId ? { licenseId } : {}) },
+    }).then((r) => ({
+      user: r.user,
+      token: r.token,
+    })),
+
+  login: ({ email, password }) =>
+    request("/auth/login", {
+      method: "POST",
+      body: { email, password },
+    }),
+
+  getMe: () =>
+    request("/health/me").then((r) => r.user),
+
+  // ---------- patient profile ----------
+
+  getPatientProfile: () =>
+    request("/patients/me/profile").then((r) => r.profile ?? r),
+
+  createPatientProfile: (profile) =>
+    request("/patients/me/profile", {
+      method: "POST",
+      body: profile,
+    }),
+
+  updatePatientProfile: (profile) =>
+    request("/patients/me/profile", {
+      method: "PATCH",
+      body: profile,
+    }),
+
+  // ---------- wallet ----------
+
+  setPatientWallet: (blockchainAddress) =>
+    request("/patients/me/wallet", {
+      method: "PUT",
+      body: { blockchainAddress },
+    }),
+
+  setAccountWallet: (blockchainAddress) =>
+    request("/account/wallet", {
+      method: "PUT",
+      body: { blockchainAddress },
+    }),
+
+  // ---------- patient: medical records ----------
+
+  getPatientRecords: () =>
+    request("/patients/me/records").then((r) => r.records),
+
+  uploadOwnRecord: (file, { title, category } = {}) => {
+    const form = new FormData();
+
+    form.append("document", file);
+
+    if (title) {
+      form.append("title", title);
+    }
+
+    if (category) {
+      form.append("category", category);
+    }
+
+    return request("/patients/me/records", {
+      method: "POST",
+      body: form,
+    }).then((r) => r.record);
+  },
+
+  verifyRecord: (recordId) =>
+    request(`/patients/me/records/${recordId}/verify`, {
+      method: "POST",
+    }).then((r) => r.verification),
+
+  registerRecordOnChain: (recordId) =>
+    request(`/patients/me/records/${recordId}/register-on-chain`, {
+      method: "POST",
+    }).then((r) => r.record),
+
+  setRecordEmergencyEssential: (recordId, isEmergencyEssential) =>
+    request(`/patients/me/records/${recordId}/emergency-essential`, {
+      method: "PATCH",
+      body: { isEmergencyEssential },
+    }).then((r) => r.record),
+
+  downloadOwnRecord: (recordId, filename) =>
+    downloadFile(
+      `/patients/me/records/${recordId}/download`,
+      filename
+    ),
+
+  // ---------- doctor: patients and records ----------
+
+  getDoctorPatients: () =>
+    request("/doctor/patients").then((r) =>
+      (r.patients || []).map(normalizeDoctorPatient)
+    ),
+
+  getPatientRecordsForDoctor: (patientId) =>
+    request(`/doctor/patients/${patientId}/records`).then(
+      (r) => r.records
+    ),
+
+  downloadRecordForDoctor: (patientId, recordId, filename) =>
+    downloadFile(
+      `/doctor/patients/${patientId}/records/${recordId}/download`,
+      filename
+    ),
+
+  createRecord: ({
+    patient_id,
+    patientId,
+    record_type,
+    title,
+    category,
+    file,
+  }) => {
+    const form = new FormData();
+
+    form.append("document", file);
+
+    if (title) {
+      form.append("title", title);
+    }
+
+    if (category || record_type) {
+      form.append("category", category || record_type);
+    }
+
+    return request(
+      `/doctor/patients/${patientId || patient_id}/records`,
+      {
+        method: "POST",
+        body: form,
+      }
+    ).then((r) => r.record);
+  },
+
+  // ---------- file-specific access requests ----------
+
+  requestRecordAccess: (patientId, recordId) =>
+    request(
+      `/doctor/patients/${patientId}/records/${recordId}/access-request`,
+      {
+        method: "POST",
+      }
+    ).then((r) => r.request),
+
+  getRecordAccessRequests: () =>
+    request("/patients/me/record-access-requests").then(
+      (r) => r.requests
+    ),
+
+  approveRecordAccess: (requestId) =>
+    request(
+      `/patients/me/record-access-requests/${requestId}/approve`,
+      {
+        method: "POST",
+      }
+    ).then((r) => r.request),
+
+  rejectRecordAccess: (requestId) =>
+    request(
+      `/patients/me/record-access-requests/${requestId}/reject`,
+      {
+        method: "POST",
+      }
+    ).then((r) => r.request),
+
+  revokeRecordAccess: (requestId) =>
+    request(
+      `/patients/me/record-access-requests/${requestId}/revoke`,
+      {
+        method: "POST",
+      }
+    ).then((r) => r.request),
+
+  // ---------- consents ----------
+
+  getConsents: () =>
+    request("/consents").then((r) =>
+      (r.consents || []).map(normalizeConsent)
+    ),
+
+  getPatientConsents: () =>
+    request("/consents").then((r) =>
+      (r.consents || []).map(normalizeConsent)
+    ),
+
+  grantConsent: (licenseId, expiresAt) =>
+    request("/consents", {
+      method: "POST",
+      body: { licenseId, expiresAt },
+    }).then((r) => r.consent),
+
+  revokeConsent: (doctorId) =>
+    request(`/consents/${doctorId}`, {
+      method: "DELETE",
+    }).then((r) => r.consent),
+
+  // ---------- prescriptions ----------
+
+  createPrescription: ({ patientId, title, signature, file }) => {
+    const form = new FormData();
+
+    form.append("document", file);
+    form.append("patientId", patientId);
+    form.append("signature", signature);
+
+    if (title) {
+      form.append("title", title);
+    }
+
+    return request("/doctor/prescriptions", {
+      method: "POST",
+      body: form,
+    }).then((r) => r.prescription);
+  },
+
+  verifyPrescription: (prescriptionId) =>
+    request(`/pharmacy/prescriptions/${prescriptionId}/verify`).then(
+      (r) => r.verification
+    ),
+
+  getPatientPrescriptions: () =>
+    request("/patients/me/prescriptions").then(
+      (r) => r.prescriptions
+    ),
+
+  downloadPatientPrescription: (prescriptionId, filename) =>
+    downloadFile(`/patients/me/prescriptions/${prescriptionId}/download`, filename),
+
+  getPharmacyHistory: () =>
+    request("/pharmacy/history").then((r) => r.history),
+
+  // ---------- emergency medical profile ----------
+
+  
+  // ---------- emergency medical profile ----------
+
+  getOwnEmergencyProfile: () =>
+    request("/patients/me/emergency-profile").then((r) => r.profile),
+
+  // Doctor: request, list and use emergency-profile permissions.
+  requestEmergencyProfilePermission: (patientId, operation) =>
+    request(
+      `/doctor/patients/${patientId}/emergency-profile-access-requests`,
+      {
+        method: "POST",
+        body: { operation },
+      }
+    ).then((r) => r.request),
+
+  getEmergencyProfilePermissionRequestsForDoctor: (patientId) =>
+    request(
+      `/doctor/patients/${patientId}/emergency-profile-access-requests`
+    ).then((r) => r.requests || []),
+
+  // Patient: list requests and approve or reject one.
+  getMyEmergencyProfilePermissionRequests: () =>
+    request("/patients/me/emergency-profile-access-requests").then(
+      (r) => r.requests || []
+    ),
+
+  decideEmergencyProfilePermission: (requestId, status) =>
+    request(
+      `/patients/me/emergency-profile-access-requests/${requestId}/decision`,
+      {
+        method: "POST",
+        body: { status },
+      }
+    ).then((r) => r.request),
+
+  // A view request ID is required by the backend for doctor profile reads.
+  getPatientEmergencyProfile: (patientId, approvalRequestId) =>
+    request(
+      `/doctor/patients/${patientId}/emergency-profile?approvalRequestId=${encodeURIComponent(approvalRequestId)}`
+    ).then((r) => r.profile),
+
+  // Create/update expect approvalRequestId and reason in the JSON body.
+  createPatientEmergencyProfile: (
+    patientId,
+    profile,
+    approvalRequestId,
+    reason
+  ) =>
+    request(`/doctor/patients/${patientId}/emergency-profile`, {
+      method: "POST",
+      body: { ...profile, approvalRequestId, reason },
+    }).then((r) => r.profile),
+
+  updatePatientEmergencyProfile: (
+    patientId,
+    changes,
+    approvalRequestId,
+    reason
+  ) =>
+    request(`/doctor/patients/${patientId}/emergency-profile`, {
+      method: "PATCH",
+      body: { ...changes, approvalRequestId, reason },
+    }).then((r) => r.profile),
+
+  getPatientEmergencyProfileAudit: (patientId, approvalRequestId) =>
+    request(
+      `/doctor/patients/${patientId}/emergency-profile/audit?approvalRequestId=${encodeURIComponent(approvalRequestId)}`
+    ).then((r) => r.audit),
+
+  // ---------- emergency access ----------
+
+  grantEmergencyAccess: ({ patientId, reason, expiresAt }) =>
+    request("/emergency-access", {
+      method: "POST",
+      body: { patientId, reason, expiresAt },
+    }),
+
+  getEmergencyEssentialRecords: (patientId) =>
+    request(
+      `/emergency-access/patients/${patientId}/records`
+    ).then((r) => r.records),
+
+  // ---------- audit ----------
+
+  getMyAuditLog: () =>
+    request("/audit-events/me").then((r) => r.events),
+
+  // ---------- admin ----------
+
+  getPendingApprovals: () =>
+    request("/admin/users/pending").then((r) =>
+      (r.users || []).map(normalizeUser)
+    ),
+
+  approveUser: (id) =>
+    request(`/admin/users/${id}/approve`, {
+      method: "POST",
+    }).then((r) => normalizeUser(r.user)),
+
+  rejectUser: (id) =>
+    request(`/admin/users/${id}/reject`, {
+      method: "POST",
+    }).then((r) => normalizeUser(r.user)),
+
+  getAllUsers: () =>
+    request("/admin/users").then((r) =>
+      (r.users || []).map(normalizeUser)
+    ),
+
+  getAuditLog: () =>
+    request("/admin/audit-events").then((r) =>
+      (r.events || []).map(normalizeAuditEvent)
+    ),
+
+  getChainLog: () =>
+    request("/admin/audit-events").then((r) =>
+      (r.events || [])
+        .filter(
+          (event) =>
+            event.blockchain_tx_hash || event.blockchainTxHash
+        )
+        .map((event) => ({
+          tx_id:
+            event.blockchain_tx_hash || event.blockchainTxHash,
+          action_type: event.event_type || event.eventType,
+          payload_hash:
+            event.resource_id || event.resourceId || "recorded",
+          created_at: event.created_at || event.createdAt,
+        }))
+    ),
+};
+

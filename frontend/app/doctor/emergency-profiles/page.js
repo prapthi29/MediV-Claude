@@ -7,6 +7,8 @@ import { EmptyState, fmtDate } from "../../../components/ui";
 import { api } from "../../../lib/api";
 
 const EMPTY = {
+  gender: "",
+  dateOfBirth: "",
   bloodGroup: "",
   emergencyContactName: "",
   emergencyContactPhone: "",
@@ -20,6 +22,55 @@ const EMPTY = {
 };
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+const GENDERS = [
+  { value: "female", label: "Female" },
+  { value: "male", label: "Male" },
+  { value: "other", label: "Other" },
+  { value: "prefer_not_to_say", label: "Prefer not to say" },
+];
+
+function ageFrom(dateOfBirth) {
+  if (!dateOfBirth) return null;
+  const [year, month, day] = dateOfBirth.split("-").map(Number);
+  const now = new Date();
+  let age = now.getFullYear() - year;
+  if (now.getMonth() + 1 < month || (now.getMonth() + 1 === month && now.getDate() < day)) age -= 1;
+  return age >= 0 ? age : null;
+}
+
+function IntegrityNote({ profile }) {
+  const signature = profile?.signature;
+  const integrity = profile?.integrity;
+  if (!signature?.profileSha256) {
+    return (
+      <p style={{ color: "var(--amber)", fontSize: 13, margin: "0 0 12px" }}>
+        This profile was saved before signing was added. The next approved edit will sign it.
+      </p>
+    );
+  }
+  const checks = integrity
+    ? [
+        ["Hash matches", integrity.hashValid],
+        ["Doctor signature", integrity.signatureValid],
+        ["On blockchain", integrity.onChain],
+      ]
+    : [];
+  return (
+    <div style={{ fontSize: 13, margin: "0 0 14px", color: "var(--muted)" }}>
+      <div style={{ fontWeight: 600, color: integrity?.verified ? "var(--primary)" : "var(--red)" }}>
+        {integrity?.verified ? "Signature verified" : "Verification failed"}
+      </div>
+      <div>
+        Version {profile.version} · signed by {signature.signedByDoctorName || "doctor"} on{" "}
+        {fmtDate(signature.signedAt)} · key{" "}
+        <span className="mono">{signature.signerAddress?.slice(0, 10)}…</span>
+      </div>
+      {!integrity?.verified && (
+        <div>{checks.map(([label, ok]) => `${label}: ${ok ? "yes" : "no"}`).join(" · ")}</div>
+      )}
+    </div>
+  );
+}
 const STATUSES = [
   { value: "unknown", label: "Unknown" },
   { value: "none_known", label: "None known" },
@@ -42,6 +93,8 @@ function toForm(profile) {
   const contact = profile?.emergencyContact || {};
 
   return {
+    gender: profile?.gender || "",
+    dateOfBirth: profile?.dateOfBirth || "",
     bloodGroup: profile?.bloodGroup || "",
     emergencyContactName: contact.name || "",
     emergencyContactPhone: contact.phone || "",
@@ -57,6 +110,8 @@ function toForm(profile) {
 
 function normalizePayload(form) {
   return {
+    gender: form.gender || undefined,
+    dateOfBirth: form.dateOfBirth || undefined,
     bloodGroup: form.bloodGroup || null,
     emergencyContactName: form.emergencyContactName || null,
     emergencyContactPhone: form.emergencyContactPhone || null,
@@ -222,6 +277,7 @@ export default function DoctorEmergencyProfiles() {
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [reason, setReason] = useState("");
+  const [password, setPassword] = useState("");
   const [audit, setAudit] = useState([]);
   const [permissionRequests, setPermissionRequests] = useState([]);
   const [loadingProfile, setLoadingProfile] = useState(false);
@@ -467,7 +523,20 @@ export default function DoctorEmergencyProfiles() {
       }
     }
 
+    if (creating) {
+      if (!form.gender) return "Select the patient's gender.";
+      if (!form.dateOfBirth) return "Enter the patient's date of birth.";
+      if (!form.bloodGroup) return "Select the patient's blood group.";
+      if (!form.emergencyContactName.trim() || !form.emergencyContactPhone.trim()) {
+        return "Enter the emergency contact's name and phone number.";
+      }
+    }
+    if (form.dateOfBirth && form.dateOfBirth > new Date().toISOString().slice(0, 10)) {
+      return "Date of birth cannot be in the future.";
+    }
+
     if (!reason.trim()) return "Enter a reason for this change.";
+    if (!password) return "Enter your password to sign this profile.";
     if (!activeApproval?.id) {
       return "An approved permission is required before saving.";
     }
@@ -509,14 +578,16 @@ export default function DoctorEmergencyProfiles() {
           patientId,
           payload,
           approval.id,
-          reason
+          reason,
+          password
         );
       } else {
         result = await api.updatePatientEmergencyProfile(
           patientId,
           payload,
           approval.id,
-          reason
+          reason,
+          password
         );
       }
 
@@ -524,8 +595,9 @@ export default function DoctorEmergencyProfiles() {
       setForm(toForm(result));
       setCreating(false);
       setReason("");
+      setPassword("");
       setActiveApproval(null);
-      setNotice("Emergency profile saved successfully.");
+      setNotice("Profile signed and saved.");
 
       try {
         // A separate approved view permission is needed for protected audit access.
@@ -740,6 +812,42 @@ export default function DoctorEmergencyProfiles() {
               Basic and emergency contact details
             </h3>
 
+            {profile && !creating && <IntegrityNote profile={profile} />}
+
+            <label style={{ display: "block", marginBottom: 12 }}>
+              Gender
+              <select
+                className="input"
+                value={form.gender}
+                onChange={(event) => setField("gender", event.target.value)}
+                style={{ display: "block", width: "100%", marginTop: 5 }}
+              >
+                <option value="">Select</option>
+                {GENDERS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={{ display: "block", marginBottom: 12 }}>
+              Date of birth
+              <input
+                className="input"
+                type="date"
+                value={form.dateOfBirth}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(event) => setField("dateOfBirth", event.target.value)}
+                style={{ display: "block", width: "100%", marginTop: 5 }}
+              />
+              {ageFrom(form.dateOfBirth) !== null && (
+                <span style={{ color: "var(--muted)", fontSize: 13 }}>
+                  Age {ageFrom(form.dateOfBirth)}
+                </span>
+              )}
+            </label>
+
             <label style={{ display: "block", marginBottom: 12 }}>
               Blood group
               <select
@@ -754,7 +862,7 @@ export default function DoctorEmergencyProfiles() {
                   marginTop: 5,
                 }}
               >
-                <option value="">Not recorded</option>
+                <option value="">Select</option>
                 {BLOOD_GROUPS.map((group) => (
                   <option key={group} value={group}>
                     {group}
@@ -872,6 +980,21 @@ export default function DoctorEmergencyProfiles() {
               />
             </label>
 
+            <label style={{ display: "block", marginBottom: 12 }}>
+              Your password (to sign)
+              <input
+                className="input"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                style={{ display: "block", width: "100%", marginTop: 5 }}
+              />
+              <span style={{ color: "var(--muted)", fontSize: 13 }}>
+                Unlocks your signing key for this one signature.
+              </span>
+            </label>
+
             <button
               type="button"
               className="btn btn-primary"
@@ -879,10 +1002,10 @@ export default function DoctorEmergencyProfiles() {
               disabled={saving || !activeApproval}
             >
               {saving
-                ? "Saving..."
+                ? "Signing..."
                 : creating
-                  ? "Create initial profile"
-                  : "Save profile changes"}
+                  ? "Sign and create profile"
+                  : "Sign and save changes"}
             </button>
 
             <p
@@ -893,8 +1016,9 @@ export default function DoctorEmergencyProfiles() {
                 marginTop: 12,
               }}
             >
-              The backend validates the approved permission and records
-              profile changes in its audit workflow.
+              Each saved version is signed with your ECDSA key and its SHA-256
+              hash is recorded on the blockchain. The patient's approval is
+              used up once you save.
             </p>
           </section>
         </>

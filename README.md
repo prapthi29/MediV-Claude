@@ -112,6 +112,12 @@ Every doctor and pharmacy gets an ECDSA (secp256k1) signing key when they regist
 
 Signatures are Ethereum personal-sign signatures over the raw 32-byte SHA-256 digest, so anyone can check them with `ethers.verifyMessage`.
 
+## Basic profile
+
+A patient's account is not active until a doctor creates their basic profile: gender, date of birth (age is calculated), blood group, emergency contact, allergies, chronic conditions and current daily medications. The patient enters the doctor's license ID, the doctor requests `create`, `view` or `update` permission, and the patient approves; each approval works once.
+
+Every saved version is signed by the doctor (password re-entry unlocks their key) over the SHA-256 hash of the canonical profile, bound to the patient and version number. The hash is registered on-chain as that version of the patient's profile record. Reads return an `integrity` object (`hashValid`, `signatureValid`, `onChain`, `verified`). Until the profile exists, record creation, prescriptions and emergency access for that patient return `409 PROFILE_NOT_ACTIVE`. Patients can no longer write their own profile; the old `/patients/me/profile` endpoints are removed.
+
 ## Admin scope
 
 Admins approve or reject doctor and pharmacy accounts only. Their user list and audit log contain only doctors, pharmacies and admins, and only account events (`user_approved`, `user_rejected`, `signing_key_created`). Patient accounts and patient-related events are not visible to admins.

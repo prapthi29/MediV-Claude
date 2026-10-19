@@ -162,6 +162,7 @@ function api({
 
   const medicalRecordService = new MedicalRecordService({
     medicalRecordRepository: new MemoryRecords(),
+    userRepository: { findById: async (id) => ({ id, role: 'patient', medical_record_status: 'active' }) },
     recordCreationApprovalRepository,
     medicalStorage: new MemoryStorage(),
     fileEncryptionService: new FileEncryptionService({
@@ -267,6 +268,7 @@ describe('medical record API', () => {
 
     const medicalRecordService = new MedicalRecordService({
       medicalRecordRepository: new MemoryRecords(),
+      userRepository: { findById: async (id) => ({ id, role: 'patient', medical_record_status: 'active' }) },
 
       recordCreationApprovalRepository: {
         consume: async ({

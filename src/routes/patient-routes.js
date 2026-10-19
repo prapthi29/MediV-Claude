@@ -1,17 +1,14 @@
 import { Router } from 'express';
-import { createPatientProfileController } from '../controllers/patient-profile-controller.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 import { createWalletController } from '../controllers/wallet-controller.js';
 
-export function createPatientRouter(authService, patientProfileService, walletService) {
+// The basic profile is written only by doctors (see emergency-profile-routes.js);
+// patients read it through GET /patients/me/emergency-profile.
+export function createPatientRouter(authService, walletService) {
   const router = Router();
-  const controller = createPatientProfileController(patientProfileService);
-  const walletController = walletService && createWalletController(walletService);
+  const walletController = createWalletController(walletService);
   router.use(authenticate(authService), authorize('patient'));
-  router.get('/me/profile', controller.getOwn);
-  router.post('/me/profile', controller.createOwn);
-  router.patch('/me/profile', controller.updateOwn);
-  if (walletController) router.put('/me/wallet', walletController.setOwn);
+  router.put('/me/wallet', walletController.setOwn);
   return router;
 }

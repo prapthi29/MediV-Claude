@@ -12,6 +12,9 @@ const ACTION_LABEL = {
   record_uploaded: "Record uploaded",
   user_approved: "Account approved",
   user_rejected: "Account rejected",
+  basic_profile_created: "Basic profile created and signed",
+  basic_profile_updated: "Basic profile updated and signed",
+  record_created: "Record added",
 };
 
 export default function PatientDashboard() {
@@ -30,7 +33,7 @@ export default function PatientDashboard() {
     const refresh = async () => {
       if (document.visibilityState !== "visible") return;
       const [profileRes, consentsRes, recordsRes, eventsRes, prescriptionsRes] = await Promise.all([
-        api.getPatientProfile().catch(() => null),
+        api.getOwnEmergencyProfile().catch(() => null),
         api.getConsents().catch(() => []),
         api.getPatientRecords().catch(() => []),
         api.getMyAuditLog().catch(() => []),
@@ -51,7 +54,7 @@ export default function PatientDashboard() {
     return () => { active = false; window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
   }, []);
 
-  const displayName = profile ? [profile.firstName, profile.lastName].filter(Boolean).join(" ") : "";
+  const displayName = profile?.patientName || storedUser?.name || "";
 
   return (
     <PortalShell
@@ -82,6 +85,17 @@ export default function PatientDashboard() {
               </div>
             </div>
           </div>
+
+          {!profile && (
+            <div className="card card-pad" style={{ marginBottom: 20, borderLeft: "4px solid var(--amber)" }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Your profile is not active yet</div>
+              <div style={{ fontSize: 13, color: "var(--muted)" }}>
+                Give a doctor access with their license ID on the{" "}
+                <a href="/patient/consents" style={{ color: "var(--primary)" }}>Consent wallet</a> page. They will
+                ask permission to create your basic profile, and once they sign it, records and prescriptions can be added.
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-4" style={{ marginBottom: 20 }}>
             <StatCard label="Doctors with access" value={consents.length} icon={<ShieldIcon />} />

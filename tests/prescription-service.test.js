@@ -53,7 +53,7 @@ async function setup() {
   const users = {
     doctor: { id: 'doctor', role: 'doctor' },
     other: { id: 'other', role: 'doctor' },
-    patient: { id: 'patient', role: 'patient', blockchain_address: Wallet.createRandom().address }
+    patient: { id: 'patient', role: 'patient', medical_record_status: 'active', blockchain_address: Wallet.createRandom().address }
   };
   const userRepository = {
     findById: async (id) => users[id],

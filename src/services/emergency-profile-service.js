@@ -1,5 +1,10 @@
 ﻿
 import { AppError } from '../utils/app-error.js';
+import { SigningKeyService } from './signing-key-service.js';
+import {
+  basicProfileChainId,
+  basicProfileSha256
+} from './basic-profile-signature.js';
 
 const STATUSES = ['unknown', 'none_known', 'provided'];
 
@@ -65,8 +70,14 @@ export class EmergencyProfileService {
     emergencyProfileRepository,
     userRepository,
     consentService,
-    emergencyProfileAccessRequestRepository
+    emergencyProfileAccessRequestRepository,
+    signingKeyService,
+    recordRegistryClient,
+    auditService
   }) {
+    this.auditService = auditService;
+    this.signingKeyService = signingKeyService;
+    this.recordRegistryClient = recordRegistryClient;
     this.emergencyProfileRepository = emergencyProfileRepository;
     this.userRepository = userRepository;
     this.consentService = consentService;
@@ -156,6 +167,82 @@ export class EmergencyProfileService {
     }
   }
 
+  // Signs one version of the full profile with the doctor's password-locked key.
+  async signVersion(doctorUserId, patientUserId, version, profile, password) {
+    const profileSha256 = basicProfileSha256(patientUserId, version, profile);
+    const { signature, signerAddress } =
+      await this.signingKeyService.signDigest(doctorUserId, password, profileSha256);
+    return { version, profileSha256, doctorSignature: signature, signerAddress };
+  }
+
+  // Anchors the signed hash on-chain as version N of the patient's profile record.
+  // A chain failure leaves the saved profile marked 'failed' rather than undoing it.
+  async anchorOnChain(patientUserId, signature, doctorUserId) {
+    await this.auditService?.record({
+      eventType: signature.version === 1 ? 'basic_profile_created' : 'basic_profile_updated',
+      actorUserId: doctorUserId,
+      subjectUserId: patientUserId,
+      resourceType: 'basic_profile',
+      resourceId: patientUserId,
+      metadata: { version: signature.version, profileSha256: signature.profileSha256 }
+    });
+    if (!this.recordRegistryClient) return;
+    const recordId = basicProfileChainId(patientUserId);
+    try {
+      let registration;
+      if (signature.version === 1) {
+        const patient = await this.userRepository.findById(patientUserId);
+        registration = await this.recordRegistryClient.registerRecord({
+          recordId,
+          contentSha256: signature.profileSha256,
+          patientAddress: patient.blockchain_address
+        });
+      } else {
+        registration = await this.recordRegistryClient.registerRecordVersion({
+          recordId,
+          expectedCurrentVersion: signature.version - 1,
+          contentSha256: signature.profileSha256
+        });
+      }
+      await this.emergencyProfileRepository.markBlockchain?.(patientUserId, signature.version, {
+        status: 'registered',
+        transactionHash: registration?.transactionHash ?? null
+      });
+    } catch (error) {
+      console.error('Basic profile blockchain anchoring failed:', error.message);
+      await this.emergencyProfileRepository.markBlockchain?.(patientUserId, signature.version, { status: 'failed' });
+    }
+  }
+
+  // Recomputes the hash from the stored fields and checks the signature and the chain.
+  async withIntegrity(profile) {
+    if (!profile) return profile;
+    const stored = profile.signature ?? {};
+    const integrity = { hashValid: false, signatureValid: false, onChain: false, verified: false };
+
+    if (stored.profileSha256) {
+      integrity.hashValid =
+        basicProfileSha256(profile.patientUserId, profile.version, profile) === stored.profileSha256;
+
+      integrity.signatureValid =
+        SigningKeyService.verifyDigest(stored.profileSha256, stored.doctorSignature, stored.signerAddress) &&
+        Boolean(await this.signingKeyService?.isKeyOfUser(stored.signerAddress, stored.signedByDoctorId));
+
+      try {
+        integrity.onChain = Boolean(await this.recordRegistryClient?.verifyRecordVersion({
+          recordId: basicProfileChainId(profile.patientUserId),
+          version: profile.version,
+          contentSha256: stored.profileSha256
+        }));
+      } catch {
+        integrity.onChain = false;
+      }
+    }
+
+    integrity.verified = integrity.hashValid && integrity.signatureValid && integrity.onChain;
+    return { ...profile, integrity };
+  }
+
   // Patients may access their own profile without doctor approval.
   async getOwnProfile(patientUserId) {
     await this.requirePatient(patientUserId);
@@ -173,7 +260,7 @@ export class EmergencyProfileService {
       );
     }
 
-    return profile;
+    return this.withIntegrity(profile);
   }
 
   // The repository consumes a one-time view approval transactionally.
@@ -198,11 +285,13 @@ export class EmergencyProfileService {
       );
     }
 
-    return this.emergencyProfileRepository.findByPatientIdForDoctor({
-      patientUserId,
-      doctorUserId,
-      approvalRequestId
-    });
+    return this.withIntegrity(
+      await this.emergencyProfileRepository.findByPatientIdForDoctor({
+        patientUserId,
+        doctorUserId,
+        approvalRequestId
+      })
+    );
   }
 
   async createInitialProfile(
@@ -210,7 +299,8 @@ export class EmergencyProfileService {
     patientUserId,
     profile,
     reason,
-    approvalRequestId
+    approvalRequestId,
+    password
   ) {
     // Validate the submitted clinical data before any protected read/write.
     validateProfile(profile);
@@ -226,13 +316,21 @@ export class EmergencyProfileService {
       operation: 'create'
     });
 
-    return this.emergencyProfileRepository.create({
+    const signature = await this.signVersion(doctorUserId, patientUserId, 1, profile, password);
+
+    const created = await this.emergencyProfileRepository.create({
       patientUserId,
       doctorUserId,
       profile,
       reason,
-      approvalRequestId
+      approvalRequestId,
+      signature
     });
+
+    await this.anchorOnChain(patientUserId, signature, doctorUserId);
+    return this.withIntegrity(
+      (await this.emergencyProfileRepository.findByPatientId(patientUserId)) ?? created
+    );
   }
 
   async updateProfile(
@@ -240,7 +338,8 @@ export class EmergencyProfileService {
     patientUserId,
     changes,
     reason,
-    approvalRequestId
+    approvalRequestId,
+    password
   ) {
     // Reject empty or malformed input before checking access.
     if (
@@ -301,13 +400,40 @@ export class EmergencyProfileService {
 
     validateProfile(merged);
 
-    return this.emergencyProfileRepository.update({
+    const full = {
+      bloodGroup: current.bloodGroup,
+      gender: current.gender,
+      dateOfBirth: current.dateOfBirth,
+      emergencyContactName: current.emergencyContact?.name ?? null,
+      emergencyContactPhone: current.emergencyContact?.phone ?? null,
+      emergencyContactRelationship: current.emergencyContact?.relationship ?? null,
+      ...merged
+    };
+    for (const key of ['bloodGroup', 'gender', 'dateOfBirth', 'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelationship']) {
+      if (Object.hasOwn(changes, key)) full[key] = changes[key];
+    }
+
+    const signature = await this.signVersion(
+      doctorUserId,
+      patientUserId,
+      (current.version ?? 1) + 1,
+      full,
+      password
+    );
+
+    const updated = await this.emergencyProfileRepository.update({
       patientUserId,
       doctorUserId,
       changes,
       reason,
-      approvalRequestId
+      approvalRequestId,
+      signature
     });
+
+    await this.anchorOnChain(patientUserId, signature, doctorUserId);
+    return this.withIntegrity(
+      (await this.emergencyProfileRepository.findByPatientId(patientUserId)) ?? updated
+    );
   }
 
   async getAuditHistory(

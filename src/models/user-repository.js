@@ -13,7 +13,7 @@ export class UserRepository {
 
   async findById(id) {
     const result = await this.database.query(
-      'SELECT id, name, email, role, status, patient_id, license_id, blockchain_address FROM users WHERE id = $1',
+      'SELECT id, name, email, role, status, patient_id, license_id, blockchain_address, medical_record_status FROM users WHERE id = $1',
       [id]
     );
     return result.rows[0] ?? null;

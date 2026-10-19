@@ -184,6 +184,12 @@ integrationDescribe(
             profile: validProfile(),
             reason: 'Initial profile integration test',
             approvalRequestId: randomUUID(),
+            signature: {
+              version: 1,
+              profileSha256: 'a'.repeat(64),
+              doctorSignature: '0xsignature',
+              signerAddress: '0x0000000000000000000000000000000000000001',
+            },
           }),
         ).rejects.toMatchObject({
           code: 'PROFILE_APPROVAL_REQUIRED',
@@ -208,6 +214,12 @@ integrationDescribe(
           profile: validProfile(),
           reason: 'Initial profile integration test',
           approvalRequestId: approval.id,
+          signature: {
+            version: 1,
+            profileSha256: 'a'.repeat(64),
+            doctorSignature: '0xsignature',
+            signerAddress: '0x0000000000000000000000000000000000000001',
+          },
         });
 
         expect(created.patientUserId).toBe(patientId);
@@ -261,6 +273,12 @@ integrationDescribe(
             profile: validProfile(),
             reason: null,
             approvalRequestId: approval.id,
+            signature: {
+              version: 1,
+              profileSha256: 'a'.repeat(64),
+              doctorSignature: '0xsignature',
+              signerAddress: '0x0000000000000000000000000000000000000001',
+            },
           }),
         ).rejects.toThrow();
 

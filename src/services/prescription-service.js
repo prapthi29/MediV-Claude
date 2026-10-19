@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { AppError } from '../utils/app-error.js';
 import { SigningKeyService } from './signing-key-service.js';
+import { assertProfileActive } from './profile-activation.js';
 
 export class PrescriptionService {
   constructor({ prescriptionRepository, medicalStorage, fileEncryptionService, userRepository, consentService, recordRegistryClient, auditService, signingKeyService }) {
@@ -17,6 +18,7 @@ export class PrescriptionService {
 
   async create(doctorUserId, patientUserId, file, { title, password }) {
     if (!file) throw new AppError(400, 'A prescription document is required.', 'FILE_REQUIRED');
+    await assertProfileActive(this.userRepository, patientUserId);
     await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
     const contentSha256 = this.createSha256(file.buffer);
     // The doctor's password unlocks their ECDSA key; the server never signs without it.

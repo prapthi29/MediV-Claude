@@ -8,7 +8,6 @@ import { loadEnv } from './config/env.js';
 
 // Repositories
 import { UserRepository } from './models/user-repository.js';
-import { PatientProfileRepository } from './models/patient-profile-repository.js';
 import { MedicalRecordRepository } from './models/medical-record-repository.js';
 import { ConsentRepository } from './models/consent-repository.js';
 import { PrescriptionRepository } from './models/prescription-repository.js';
@@ -24,7 +23,6 @@ import { SigningKeyRepository } from './models/signing-key-repository.js';
 
 // Services
 import { AuthService } from './services/auth-service.js';
-import { PatientProfileService } from './services/patient-profile-service.js';
 import { MedicalRecordService } from './services/medical-record-service.js';
 import { FileEncryptionService } from './encryption/file-encryption-service.js';
 import { WalletService } from './services/wallet-service.js';
@@ -42,7 +40,6 @@ const database = createDatabase(config);
 
 // Repositories
 const userRepository = new UserRepository(database);
-const patientProfileRepository = new PatientProfileRepository(database);
 const medicalRecordRepository = new MedicalRecordRepository(database);
 const auditRepository = new AuditRepository(database);
 
@@ -67,11 +64,6 @@ const authService = new AuthService({
   jwtSecret: config.JWT_SECRET,
   jwtExpiresIn: config.JWT_EXPIRES_IN,
   signingKeyService
-});
-
-// Patient profiles
-const patientProfileService = new PatientProfileService({
-  patientProfileRepository
 });
 
 // Blockchain configuration
@@ -177,7 +169,10 @@ const emergencyProfileService = new EmergencyProfileService({
   ),
   userRepository,
   consentService,
-  emergencyProfileAccessRequestRepository
+  emergencyProfileAccessRequestRepository,
+  signingKeyService,
+  recordRegistryClient,
+  auditService
 });
 
 // Administration
@@ -190,7 +185,6 @@ const adminService = new AdminService({
 // Express application
 const app = createApp({
   authService,
-  patientProfileService,
   medicalRecordService,
   walletService,
   consentService,

@@ -173,23 +173,6 @@ export const api = {
   getMe: () =>
     request("/health/me").then((r) => r.user),
 
-  // ---------- patient profile ----------
-
-  getPatientProfile: () =>
-    request("/patients/me/profile").then((r) => r.profile ?? r),
-
-  createPatientProfile: (profile) =>
-    request("/patients/me/profile", {
-      method: "POST",
-      body: profile,
-    }),
-
-  updatePatientProfile: (profile) =>
-    request("/patients/me/profile", {
-      method: "PATCH",
-      body: profile,
-    }),
-
   // ---------- wallet ----------
 
   setPatientWallet: (blockchainAddress) =>
@@ -447,22 +430,24 @@ export const api = {
     patientId,
     profile,
     approvalRequestId,
-    reason
+    reason,
+    password
   ) =>
     request(`/doctor/patients/${patientId}/emergency-profile`, {
       method: "POST",
-      body: { ...profile, approvalRequestId, reason },
+      body: { ...profile, approvalRequestId, reason, password },
     }).then((r) => r.profile),
 
   updatePatientEmergencyProfile: (
     patientId,
     changes,
     approvalRequestId,
-    reason
+    reason,
+    password
   ) =>
     request(`/doctor/patients/${patientId}/emergency-profile`, {
       method: "PATCH",
-      body: { ...changes, approvalRequestId, reason },
+      body: { ...changes, approvalRequestId, reason, password },
     }).then((r) => r.profile),
 
   getPatientEmergencyProfileAudit: (patientId, approvalRequestId) =>

@@ -33,7 +33,6 @@ import { errorHandler, notFound } from './middleware/error-handler.js';
 
 export function createApp({
   authService,
-  patientProfileService,
   medicalRecordService,
   walletService,
   consentService,
@@ -57,16 +56,9 @@ export function createApp({
   app.use('/api/v1/auth', createAuthRouter(authService));
   app.use('/api/v1/health', createHealthRouter(authService));
 
-  // Patient profiles
-  if (patientProfileService) {
-    app.use(
-      '/api/v1/patients',
-      createPatientRouter(
-        authService,
-        patientProfileService,
-        walletService
-      )
-    );
+  // Patient wallet
+  if (walletService) {
+    app.use('/api/v1/patients', createPatientRouter(authService, walletService));
   }
 
   // Wallet and account

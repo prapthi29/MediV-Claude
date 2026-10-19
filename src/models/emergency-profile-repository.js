@@ -1,7 +1,10 @@
 import { AppError } from '../utils/app-error.js';
+import { ageFromDateOfBirth } from '../services/basic-profile-signature.js';
 
 const PROFILE_COLUMNS = {
   bloodGroup: 'blood_group',
+  gender: 'gender',
+  dateOfBirth: 'date_of_birth',
   emergencyContactName: 'emergency_contact_name',
   emergencyContactPhone: 'emergency_contact_phone',
   emergencyContactRelationship: 'emergency_contact_relationship',
@@ -13,14 +16,33 @@ const PROFILE_COLUMNS = {
   medicationsStatus: 'medications_status'
 };
 
+const PROFILE_SELECT = `SELECT p.*, u.name AS patient_name, u.patient_id,
+              u.medical_record_status, d.name AS signed_by_doctor_name
+       FROM patient_emergency_profiles p
+       JOIN users u ON u.id = p.patient_user_id
+       LEFT JOIN users d ON d.id = p.signed_by_doctor_id
+       WHERE p.patient_user_id = $1`;
+
+// pg returns DATE columns as local-midnight Date objects.
+function isoDate(value) {
+  if (!value) return null;
+  if (typeof value === 'string') return value.slice(0, 10);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
+
 function publicProfile(row) {
   if (!row) return null;
+  const dateOfBirth = isoDate(row.date_of_birth);
 
   return {
     patientUserId: row.patient_user_id,
     patientName: row.patient_name,
     patientId: row.patient_id,
     medicalRecordStatus: row.medical_record_status,
+    gender: row.gender ?? null,
+    dateOfBirth,
+    age: ageFromDateOfBirth(dateOfBirth),
     bloodGroup: row.blood_group,
     emergencyContact: {
       name: row.emergency_contact_name,
@@ -34,6 +56,17 @@ function publicProfile(row) {
     currentMedications: row.current_medications,
     medicationsStatus: row.medications_status,
     createdByDoctorId: row.created_by_doctor_id,
+    version: row.version,
+    signature: {
+      profileSha256: row.profile_sha256 ?? null,
+      doctorSignature: row.doctor_signature ?? null,
+      signerAddress: row.signer_address ?? null,
+      signedByDoctorId: row.signed_by_doctor_id ?? null,
+      signedByDoctorName: row.signed_by_doctor_name ?? null,
+      signedAt: row.signed_at ?? null,
+      blockchainStatus: row.blockchain_status ?? 'pending',
+      blockchainTxHash: row.blockchain_tx_hash ?? null
+    },
     lastReviewedAt: row.last_reviewed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -54,11 +87,7 @@ export class EmergencyProfileRepository {
   // Patient self-access. This method does not expose doctor access.
   async findByPatientId(patientUserId) {
     const result = await this.database.query(
-      `SELECT p.*, u.name AS patient_name, u.patient_id,
-              u.medical_record_status
-       FROM patient_emergency_profiles p
-       JOIN users u ON u.id = p.patient_user_id
-       WHERE p.patient_user_id = $1`,
+      PROFILE_SELECT,
       [patientUserId]
     );
 
@@ -74,11 +103,7 @@ export class EmergencyProfileRepository {
   }) {
     return this.database.transaction(async (client) => {
       const profileResult = await client.query(
-        `SELECT p.*, u.name AS patient_name, u.patient_id,
-                u.medical_record_status
-         FROM patient_emergency_profiles p
-         JOIN users u ON u.id = p.patient_user_id
-         WHERE p.patient_user_id = $1`,
+        PROFILE_SELECT,
         [patientUserId]
       );
 
@@ -116,7 +141,8 @@ export class EmergencyProfileRepository {
     doctorUserId,
     profile,
     reason,
-    approvalRequestId
+    approvalRequestId,
+    signature
   }) {
     return this.database.transaction(async (client) => {
       const patient = await client.query(
@@ -198,11 +224,20 @@ export class EmergencyProfileRepository {
            current_medications,
            medications_status,
            created_by_doctor_id,
-           last_reviewed_at
+           last_reviewed_at,
+           gender,
+           date_of_birth,
+           version,
+           profile_sha256,
+           doctor_signature,
+           signer_address,
+           signed_by_doctor_id,
+           signed_at
          ) VALUES (
            $1, $2, $3, $4, $5,
            $6::jsonb, $7, $8::jsonb, $9,
-           $10::jsonb, $11, $12, NOW()
+           $10::jsonb, $11, $12, NOW(),
+           $13, $14, $15, $16, $17, $18, $12, NOW()
          )
          RETURNING *`,
         [
@@ -217,21 +252,32 @@ export class EmergencyProfileRepository {
           profile.chronicConditionsStatus,
           JSON.stringify(profile.currentMedications),
           profile.medicationsStatus,
-          doctorUserId
+          doctorUserId,
+          profile.gender ?? null,
+          profile.dateOfBirth ?? null,
+          signature.version,
+          signature.profileSha256,
+          signature.doctorSignature,
+          signature.signerAddress
         ]
       );
 
       await client.query(
         `INSERT INTO patient_emergency_profile_audit
-         (patient_user_id, doctor_user_id, action, changed_fields, change_reason)
-         VALUES ($1, $2, 'created', $3::jsonb, $4)`,
+         (patient_user_id, doctor_user_id, action, changed_fields, change_reason,
+          version, profile_sha256, doctor_signature, signer_address)
+         VALUES ($1, $2, 'created', $3::jsonb, $4, $5, $6, $7, $8)`,
         [
           patientUserId,
           doctorUserId,
           JSON.stringify({
             profile: { previous: null, new: profile }
           }),
-          reason
+          reason,
+          signature.version,
+          signature.profileSha256,
+          signature.doctorSignature,
+          signature.signerAddress
         ]
       );
 
@@ -244,11 +290,7 @@ export class EmergencyProfileRepository {
       );
 
       const result = await client.query(
-        `SELECT p.*, u.name AS patient_name, u.patient_id,
-                u.medical_record_status
-         FROM patient_emergency_profiles p
-         JOIN users u ON u.id = p.patient_user_id
-         WHERE p.patient_user_id = $1`,
+        PROFILE_SELECT,
         [patientUserId]
       );
 
@@ -261,7 +303,8 @@ export class EmergencyProfileRepository {
     doctorUserId,
     changes,
     reason,
-    approvalRequestId
+    approvalRequestId,
+    signature
   }) {
     return this.database.transaction(async (client) => {
       const patient = await client.query(
@@ -312,6 +355,15 @@ export class EmergencyProfileRepository {
           404,
           'Create the initial emergency profile first.',
           'EMERGENCY_PROFILE_NOT_FOUND'
+        );
+      }
+
+      // The doctor signed version N+1 of what they read; refuse if someone else changed it since.
+      if (current.version + 1 !== signature.version) {
+        throw new AppError(
+          409,
+          'The profile changed while you were editing. Reload it and try again.',
+          'PROFILE_VERSION_CONFLICT'
         );
       }
 
@@ -372,7 +424,24 @@ export class EmergencyProfileRepository {
         );
       }
 
-      assignments.push('last_reviewed_at = NOW()', 'updated_at = NOW()');
+      for (const [column, value] of [
+        ['version', signature.version],
+        ['profile_sha256', signature.profileSha256],
+        ['doctor_signature', signature.doctorSignature],
+        ['signer_address', signature.signerAddress],
+        ['signed_by_doctor_id', doctorUserId]
+      ]) {
+        values.push(value);
+        assignments.push(`${column} = $${values.length}`);
+      }
+
+      assignments.push(
+        'signed_at = NOW()',
+        "blockchain_status = 'pending'",
+        'blockchain_tx_hash = NULL',
+        'last_reviewed_at = NOW()',
+        'updated_at = NOW()'
+      );
 
       await client.query(
         `UPDATE patient_emergency_profiles
@@ -383,22 +452,23 @@ export class EmergencyProfileRepository {
 
       await client.query(
         `INSERT INTO patient_emergency_profile_audit
-         (patient_user_id, doctor_user_id, action, changed_fields, change_reason)
-         VALUES ($1, $2, 'updated', $3::jsonb, $4)`,
+         (patient_user_id, doctor_user_id, action, changed_fields, change_reason,
+          version, profile_sha256, doctor_signature, signer_address)
+         VALUES ($1, $2, 'updated', $3::jsonb, $4, $5, $6, $7, $8)`,
         [
           patientUserId,
           doctorUserId,
           JSON.stringify({ previous: before, new: after }),
-          reason
+          reason,
+          signature.version,
+          signature.profileSha256,
+          signature.doctorSignature,
+          signature.signerAddress
         ]
       );
 
       const result = await client.query(
-        `SELECT p.*, u.name AS patient_name, u.patient_id,
-                u.medical_record_status
-         FROM patient_emergency_profiles p
-         JOIN users u ON u.id = p.patient_user_id
-         WHERE p.patient_user_id = $1`,
+        PROFILE_SELECT,
         [patientUserId]
       );
 
@@ -433,7 +503,8 @@ export class EmergencyProfileRepository {
 
       const result = await client.query(
         `SELECT id, patient_user_id, doctor_user_id, action,
-                changed_fields, change_reason, created_at
+                changed_fields, change_reason, created_at,
+                version, profile_sha256, doctor_signature, signer_address
          FROM patient_emergency_profile_audit
          WHERE patient_user_id = $1
          ORDER BY created_at DESC`,
@@ -442,6 +513,15 @@ export class EmergencyProfileRepository {
 
       return result.rows;
     });
+  }
+
+  async markBlockchain(patientUserId, version, { status, transactionHash = null }) {
+    await this.database.query(
+      `UPDATE patient_emergency_profiles
+       SET blockchain_status = $3, blockchain_tx_hash = $4
+       WHERE patient_user_id = $1 AND version = $2`,
+      [patientUserId, version, status, transactionHash]
+    );
   }
 
   // Retained for existing internal callers. Do not expose this

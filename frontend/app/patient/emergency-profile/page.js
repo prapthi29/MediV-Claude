@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "../../../lib/api";
 
+const GENDER_LABEL = { female: "Female", male: "Male", other: "Other", prefer_not_to_say: "Prefer not to say" };
+
 function displayValue(value) {
   return value && String(value).trim() ? value : "Not recorded";
 }
@@ -325,7 +327,40 @@ export default function PatientEmergencyProfilePage() {
                 {displayValue(profile.bloodGroup)}
               </strong>
             </div>
+            <div>
+              <span className="emergency-field-label">Gender</span>
+              <strong>{displayValue(GENDER_LABEL[profile.gender] || profile.gender)}</strong>
+            </div>
+            <div>
+              <span className="emergency-field-label">Date of birth</span>
+              <strong>
+                {displayValue(profile.dateOfBirth)}
+                {profile.age !== null && profile.age !== undefined ? ` (age ${profile.age})` : ""}
+              </strong>
+            </div>
           </section>
+
+          <Section title="Doctor's signature">
+            {profile.signature?.profileSha256 ? (
+              <p>
+                <strong style={{ color: profile.integrity?.verified ? "var(--primary)" : "var(--red)" }}>
+                  {profile.integrity?.verified ? "Verified" : "Could not be verified"}
+                </strong>
+                {" · "}Version {profile.version}, signed by{" "}
+                {displayValue(profile.signature.signedByDoctorName)} on{" "}
+                {new Date(profile.signature.signedAt).toLocaleString()}.
+                {!profile.integrity?.verified && (
+                  <>
+                    {" "}Hash matches: {profile.integrity?.hashValid ? "yes" : "no"}; signature:{" "}
+                    {profile.integrity?.signatureValid ? "yes" : "no"}; on blockchain:{" "}
+                    {profile.integrity?.onChain ? "yes" : "no"}.
+                  </>
+                )}
+              </p>
+            ) : (
+              <p>This profile was saved before doctor signatures were added.</p>
+            )}
+          </Section>
 
           <Section title="Emergency contact">
             <div className="emergency-details-grid">

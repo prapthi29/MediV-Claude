@@ -81,7 +81,11 @@ function setup({ doctorStatus = 'active', existingProfile = null } = {}) {
       emergencyProfileRepository: repository,
       userRepository: users,
       consentService,
-      emergencyProfileAccessRequestRepository
+      emergencyProfileAccessRequestRepository,
+      signingKeyService: {
+        signDigest: vi.fn(async () => ({ signature: '0xsignature', signerAddress: '0xsigner' })),
+        isKeyOfUser: vi.fn(async () => true)
+      }
     })
   };
 }
@@ -104,7 +108,13 @@ describe('emergency medical profile service', () => {
       doctorUserId: doctorId,
       profile,
       reason: 'Initial clinical assessment',
-      approvalRequestId
+      approvalRequestId,
+      signature: expect.objectContaining({
+        version: 1,
+        profileSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+        doctorSignature: '0xsignature',
+        signerAddress: '0xsigner'
+      })
     });
   });
 
@@ -234,7 +244,8 @@ describe('emergency medical profile service', () => {
       doctorUserId: doctorId,
       changes: { currentMedications: updatedMedications },
       reason: 'Dosage revised after clinical review',
-      approvalRequestId
+      approvalRequestId,
+      signature: expect.objectContaining({ version: 2, doctorSignature: '0xsignature' })
     });
   });
 

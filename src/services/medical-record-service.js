@@ -2,6 +2,7 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { AppError } from '../utils/app-error.js';
+import { assertProfileActive } from './profile-activation.js';
 
 export class MedicalRecordService {
   constructor({
@@ -49,6 +50,7 @@ export class MedicalRecordService {
     metadata,
     approvalId
   ) {
+    await assertProfileActive(this.userRepository, patientUserId);
     await this.consentService.assertDoctorAccess(
       patientUserId,
       doctorUserId
@@ -94,6 +96,7 @@ export class MedicalRecordService {
       );
     }
 
+    await assertProfileActive(this.userRepository, patientUserId);
     await this.consentService.assertDoctorAccess(
       patientUserId,
       doctorUserId
@@ -313,6 +316,7 @@ export class MedicalRecordService {
     if (doctorUserId === patientUserId) {
       throw new AppError(400, 'Invalid patient account.', 'INVALID_PATIENT');
     }
+    await assertProfileActive(this.userRepository, patientUserId);
     await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
     const doctor = await this.userRepository.findById(doctorUserId);
     if (!doctor || doctor.role !== 'doctor' || doctor.status !== 'active') {
@@ -380,6 +384,7 @@ export class MedicalRecordService {
   async updateRecordForDoctor(doctorUserId, patientUserId, recordId, file, metadata, approvalId) {
     this.requireVersioning();
     if (!file?.buffer?.length) throw new AppError(400, 'A medical document is required.', 'FILE_REQUIRED');
+    await assertProfileActive(this.userRepository, patientUserId);
     await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
     const doctor = await this.userRepository.findById(doctorUserId);
     if (!doctor || doctor.role !== 'doctor' || doctor.status !== 'active') {

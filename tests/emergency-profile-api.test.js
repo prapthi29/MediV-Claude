@@ -173,6 +173,10 @@ describe('emergency profile API authorization', () => {
       .set('Authorization', `Bearer ${token('doctor', DOCTOR_ID)}`)
       .send({
         bloodGroup: 'O+',
+        gender: 'female',
+        dateOfBirth: '1990-04-12',
+        emergencyContactName: 'Ravi Patel',
+        emergencyContactPhone: '+919999999999',
         allergies: [],
         allergiesStatus: 'unknown',
         chronicConditions: [],
@@ -180,7 +184,8 @@ describe('emergency profile API authorization', () => {
         currentMedications: [],
         medicationsStatus: 'unknown',
         reason: 'Initial assessment',
-        approvalRequestId: APPROVAL_ID
+        approvalRequestId: APPROVAL_ID,
+        password: 'Strong#Pass123'
       })
       .expect(403);
 

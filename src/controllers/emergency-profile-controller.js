@@ -25,7 +25,14 @@ const medicationSchema = z.object({
   frequency: text(200)
 }).strict();
 
+const dateOfBirth = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.')
+  .refine((value) => !Number.isNaN(Date.parse(value)) && value <= new Date().toISOString().slice(0, 10), 'Date of birth cannot be in the future.');
+const gender = z.enum(['female', 'male', 'other', 'prefer_not_to_say']);
+const password = z.string().min(1).max(128);
+
 const profileFields = {
+  gender: gender.optional(),
+  dateOfBirth: dateOfBirth.optional(),
   bloodGroup: z.enum([
     'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'
   ]).nullable().optional(),
@@ -42,6 +49,12 @@ const profileFields = {
 
 const createSchema = z.object({
   ...profileFields,
+  gender,
+  dateOfBirth,
+  bloodGroup: profileFields.bloodGroup.unwrap().unwrap(),
+  emergencyContactName: text(200),
+  emergencyContactPhone: text(30),
+  password,
   allergies: z.array(allergySchema).max(100),
   allergiesStatus: status,
   chronicConditions: z.array(conditionSchema).max(100),
@@ -55,11 +68,12 @@ const createSchema = z.object({
 const updateSchema = z.object({
   ...profileFields,
   reason: text(1000),
-  approvalRequestId: z.string().uuid()
+  approvalRequestId: z.string().uuid(),
+  password
 }).strict().refine(
   (body) =>
     Object.keys(body).some(
-      (key) => !['reason', 'approvalRequestId'].includes(key)
+      (key) => !['reason', 'approvalRequestId', 'password'].includes(key)
     ),
   'Provide at least one field to update.'
 );
@@ -117,14 +131,15 @@ export function createEmergencyProfileController(service) {
     create: asyncHandler(async (req, res) => {
       const patientId = parsePatientId(req);
       const input = createSchema.parse(req.body);
-      const { reason, approvalRequestId, ...profile } = input;
+      const { reason, approvalRequestId, password: signingPassword, ...profile } = input;
 
       const created = await service.createInitialProfile(
         req.user.sub,
         patientId,
         profile,
         reason,
-        approvalRequestId
+        approvalRequestId,
+        signingPassword
       );
 
       res.status(201).json({ profile: created });
@@ -133,14 +148,15 @@ export function createEmergencyProfileController(service) {
     update: asyncHandler(async (req, res) => {
       const patientId = parsePatientId(req);
       const input = updateSchema.parse(req.body);
-      const { reason, approvalRequestId, ...changes } = input;
+      const { reason, approvalRequestId, password: signingPassword, ...changes } = input;
 
       const updated = await service.updateProfile(
         req.user.sub,
         patientId,
         changes,
         reason,
-        approvalRequestId
+        approvalRequestId,
+        signingPassword
       );
 
       res.json({ profile: updated });

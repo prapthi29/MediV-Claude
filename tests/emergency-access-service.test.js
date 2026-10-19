@@ -17,7 +17,7 @@ describe('emergency access service', () => {
     const events = [];
     const service = new EmergencyAccessService({
       emergencyAccessRepository: new Grants(),
-      userRepository: { findById: async (id) => id === 'doctor' ? { role: 'doctor' } : { role: 'patient' } },
+      userRepository: { findById: async (id) => id === 'doctor' ? { role: 'doctor' } : { role: 'patient', medical_record_status: 'active' } },
       medicalRecordRepository: { listEssentialForPatient: async () => [{ id: 'record-1', title: 'Allergies', is_emergency_essential: true }] },
       auditService: { record: async (event) => events.push(event) }
     });
@@ -30,7 +30,7 @@ describe('emergency access service', () => {
   it('rejects access past the controlled one-hour maximum', async () => {
     const service = new EmergencyAccessService({
       emergencyAccessRepository: new Grants(),
-      userRepository: { findById: async (id) => ({ role: id === 'doctor' ? 'doctor' : 'patient' }) },
+      userRepository: { findById: async (id) => (id === 'doctor' ? { role: 'doctor' } : { role: 'patient', medical_record_status: 'active' }) },
       medicalRecordRepository: {}, auditService: { record: async () => {} }
     });
     await expect(service.grant('doctor', 'patient', 'Unconscious following an accident', new Date(Date.now() + 61 * 60 * 1000)))

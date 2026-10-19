@@ -78,7 +78,7 @@ function makeHarness({ approvalAvailable = true, chainCount = 1 } = {}) {
     medicalRecordRepository, recordUpdateApprovalRepository, medicalRecordVersionRepository,
     recordAccessRequestRepository: { hasApproved: async () => true },
     medicalStorage, fileEncryptionService: new FileEncryptionService({ masterKey: Buffer.alloc(32, 7) }),
-    userRepository: { findById: async (id) => id === doctorId ? { id, role: 'doctor', status: 'active' } : { id: patientId, role: 'patient' } },
+    userRepository: { findById: async (id) => id === doctorId ? { id, role: 'doctor', status: 'active' } : { id: patientId, role: 'patient', medical_record_status: 'active' } },
     recordRegistryClient, consentService: { assertDoctorAccess: async () => true }
   });
   return { service, versions, record, recordUpdateApprovalRepository, get approvalConsumed() { return approvalConsumed; }, get versionCount() { return versionCount; } };

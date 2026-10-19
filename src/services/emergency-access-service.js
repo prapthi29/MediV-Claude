@@ -1,4 +1,5 @@
 import { AppError } from "../utils/app-error.js";
+import { assertProfileActive } from "./profile-activation.js";
 
 const MAX_DURATION_MS = 60 * 60 * 1000;
 const MIN_REASON_LENGTH = 10;
@@ -66,6 +67,8 @@ export class EmergencyAccessService {
         "PATIENT_NOT_FOUND"
       );
     }
+
+    await assertProfileActive(this.userRepository, patientUserId);
 
     const grant = await this.emergencyAccessRepository.create({
       patientUserId,

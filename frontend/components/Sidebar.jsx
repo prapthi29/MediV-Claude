@@ -69,7 +69,7 @@ export default function Sidebar({ role, userLabel }) {
       { href: "/doctor/patients", label: "My patients", icon: ICONS.patients },
       { href: "/doctor/emergency", label: "Emergency access", icon: ICONS.approvals },
       { href: "/doctor/emergency-profiles", label: "Emergency profiles", icon: ICONS.verify },
-      { href: "/doctor/records/new", label: "Upload record", icon: ICONS.upload },
+      { href: "/doctor/records/new", label: "Add record", icon: ICONS.upload },
       { href: "/doctor/prescriptions/new", label: "Write prescription", icon: ICONS.writeRx },
     ],
 

@@ -374,22 +374,42 @@ export const api = {
   // ---------- prescriptions ----------
 
   // The doctor's password unlocks their signing key on the server for this one signature.
-  createPrescription: ({ patientId, title, password, file }) => {
-    const form = new FormData();
-
-    form.append("document", file);
-    form.append("patientId", patientId);
-    form.append("password", password);
-
-    if (title) {
-      form.append("title", title);
-    }
-
-    return request("/doctor/prescriptions", {
+  createPrescription: ({ patientId, approvalId, title, medications, diagnosis, notes, password }) =>
+    request("/doctor/prescriptions", {
       method: "POST",
-      body: form,
-    }).then((r) => r.prescription);
-  },
+      body: {
+        patientId,
+        approvalId,
+        title: title || undefined,
+        medications,
+        diagnosis: diagnosis || undefined,
+        notes: notes || undefined,
+        password,
+      },
+    }).then((r) => r.prescription),
+
+  requestPrescriptionApproval: (patientId) =>
+    request(`/doctor/patients/${patientId}/prescription-requests`, {
+      method: "POST",
+    }).then((r) => r.approval),
+
+  getPrescriptionApprovalsForDoctor: (patientId) =>
+    request(`/doctor/patients/${patientId}/prescription-requests`).then(
+      (r) => r.approvals || []
+    ),
+
+  getPrescriptionRequests: () =>
+    request("/patients/me/prescription-requests").then(
+      (r) => r.approvals || []
+    ),
+
+  decidePrescriptionRequest: (requestId, decision) =>
+    request(`/patients/me/prescription-requests/${requestId}/${decision}`, {
+      method: "POST",
+    }).then((r) => r.approval),
+
+  viewPatientPrescription: (prescriptionId) =>
+    request(`/patients/me/prescriptions/${prescriptionId}`),
 
   verifyPrescription: (prescriptionId) =>
     request(`/pharmacy/prescriptions/${prescriptionId}/verify`).then(

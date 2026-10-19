@@ -1,18 +1,8 @@
 import { Router } from "express";
-import multer from "multer";
 
 import { createPrescriptionController } from "../controllers/prescription-controller.js";
 import { authenticate } from "../middleware/authenticate.js";
 import { authorize } from "../middleware/authorize.js";
-
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_FILE_SIZE, files: 1 },
-});
-
-
 
 // --------------------------------------------------
 // DOCTOR PRESCRIPTION ROUTES
@@ -32,12 +22,27 @@ export function createDoctorPrescriptionRouter(
     controller.listForPatient
   );
 
+  // Typed prescription form (JSON), signed with the doctor's password.
   router.post(
     "/prescriptions",
     authenticate(authService),
     authorize("doctor"),
-    upload.single("document"),
     controller.create
+  );
+
+  // Each prescription needs its own patient approval.
+  router.post(
+    "/patients/:patientId/prescription-requests",
+    authenticate(authService),
+    authorize("doctor"),
+    controller.requestApproval
+  );
+
+  router.get(
+    "/patients/:patientId/prescription-requests",
+    authenticate(authService),
+    authorize("doctor"),
+    controller.listApprovalsForDoctor
   );
 
   return router;
@@ -87,6 +92,24 @@ export function createPatientPrescriptionRouter(
     authenticate(authService),
     authorize("patient"),
     controller.listForPatient
+  );
+
+  router.get(
+    "/me/prescription-requests",
+    authenticate(authService),
+    authorize("patient"),
+    controller.listApprovalsForPatient
+  );
+
+  router.post("/me/prescription-requests/:requestId/approve", authenticate(authService), authorize("patient"), controller.approve);
+  router.post("/me/prescription-requests/:requestId/reject", authenticate(authService), authorize("patient"), controller.reject);
+  router.post("/me/prescription-requests/:requestId/revoke", authenticate(authService), authorize("patient"), controller.revoke);
+
+  router.get(
+    "/me/prescriptions/:prescriptionId",
+    authenticate(authService),
+    authorize("patient"),
+    controller.viewForPatient
   );
 
   router.get(

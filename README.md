@@ -132,9 +132,11 @@ The form and file are packed into one object (`src/services/diagnosis-bundle.js`
 
 Admins approve or reject doctor and pharmacy accounts only. Their user list and audit log contain only doctors, pharmacies and admins, and only account events (`user_approved`, `user_rejected`, `signing_key_created`). Patient accounts and patient-related events are not visible to admins.
 
-## Prescription verification
+## Prescriptions
 
-The doctor uploads the prescription document (multipart `document`) with `patientId`, an optional `title`, and their account `password`. The backend uses the password to unlock the doctor's signing key, signs the document's SHA-256 digest, stores the signature and signer address, encrypts the document, and registers the digest on-chain. A pharmacy uses the verification endpoint and receives only validity results and non-sensitive issuance metadata—never the prescription file.
+A prescription is a typed form: one or more medicines (name, dose, how often, for how long, optional instructions), plus an optional diagnosis and advice for the patient. The doctor first asks the patient (`POST /doctor/patients/:id/prescription-requests`); the patient approves under Prescriptions, and the doctor can then issue one prescription with that approval (`POST /doctor/prescriptions` with `patientId`, `approvalId`, `medications`, `password`).
+
+The hash the doctor signs and registers on-chain is built from two parts: `sha256({ type, patientUserId, medicationsSha256, clinicalSha256 })` (see `src/services/prescription-document.js`). This lets a pharmacy check the doctor's signature against the medicines alone, without seeing the diagnosis or advice. The stored document is encrypted with AES-256-GCM. Older prescriptions uploaded as files still open and verify.
 
 ## Emergency access and audit trail
 

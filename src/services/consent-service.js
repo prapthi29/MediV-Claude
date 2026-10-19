@@ -92,6 +92,7 @@ export class ConsentService {
       patientUserId: consent.patient_user_id,
       patientName: consent.patient_name,
       patientEmail: consent.patient_email,
+      patientHealthId: consent.patient_health_id ?? null,
       expiresAt: consent.expires_at,
       createdAt: consent.created_at,
     }));

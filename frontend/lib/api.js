@@ -65,7 +65,7 @@ function normalizeDoctorPatient(patient) {
     ...patient,
     id: patient.id || patient.patientUserId,
     name: patient.name || patient.patientName || patient.patientEmail,
-    health_id: patient.health_id || patient.patientUserId,
+    health_id: patient.health_id || patient.patientHealthId || "",
     records_count: patient.records_count || 0,
     last_visit: patient.last_visit || patient.createdAt,
     granted_at: patient.granted_at || patient.createdAt,

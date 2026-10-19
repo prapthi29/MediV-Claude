@@ -24,7 +24,8 @@ export class ConsentRepository {
     const result = await this.database.query(
       `SELECT consent.patient_user_id, consent.expires_at,
               consent.created_at, consent.updated_at,
-              users.name AS patient_name, users.email AS patient_email
+              users.name AS patient_name, users.email AS patient_email,
+              users.patient_id AS patient_health_id
        FROM patient_doctor_consents consent
        JOIN users ON users.id = consent.patient_user_id
        WHERE consent.doctor_user_id = $1

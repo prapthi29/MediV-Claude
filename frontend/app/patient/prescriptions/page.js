@@ -1,8 +1,59 @@
 "use client";
 import { useEffect, useState } from "react";
 import PortalShell from "../../../components/PortalShell";
+import TimeLeft from "../../../components/TimeLeft";
 import { EmptyState, fmtDate, fmtDateTime } from "../../../components/ui";
 import { api } from "../../../lib/api";
+
+function SharePanel({ prescription, shares, onShare, onRevoke, busy }) {
+  const [pharmacyId, setPharmacyId] = useState("");
+  const mine = shares.filter((s) => s.prescriptionId === prescription.id);
+  const active = mine.filter((s) => s.status === "active");
+
+  if (prescription.dispensedAt) {
+    const by = mine.find((s) => s.status === "dispensed");
+    return (
+      <p style={{ marginTop: 16, fontWeight: 600 }}>
+        Dispensed{by?.pharmacyName ? ` by ${by.pharmacyName}` : ""} on {fmtDateTime(prescription.dispensedAt)}. It can't be shared again.
+      </p>
+    );
+  }
+  if (prescription.format !== "form") return null;
+
+  return (
+    <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+      <h4 style={{ margin: "0 0 6px", fontSize: 14 }}>Share with a pharmacy</h4>
+      <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "0 0 10px" }}>
+        The pharmacy sees your name and the medicines for 30 minutes, not the diagnosis or advice. You can stop sharing sooner.
+      </p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (pharmacyId.trim()) onShare(prescription.id, pharmacyId.trim()).then((ok) => ok && setPharmacyId(""));
+        }}
+        style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}
+      >
+        <div className="field" style={{ marginBottom: 0, flex: "1 1 220px" }}>
+          <label htmlFor="pharmacy-id">Pharmacy ID</label>
+          <input id="pharmacy-id" value={pharmacyId} onChange={(e) => setPharmacyId(e.target.value)} placeholder="The ID the pharmacy gives you" autoComplete="off" />
+        </div>
+        <button className="btn btn-primary" type="submit" disabled={busy === "share"}>
+          {busy === "share" ? "Sharing…" : "Share for 30 minutes"}
+        </button>
+      </form>
+      {active.map((s) => (
+        <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "8px 0" }}>
+          <span>
+            Shared with <strong>{s.pharmacyName}</strong> · <TimeLeft until={s.expiresAt} />
+          </span>
+          <button className="btn btn-danger btn-sm" disabled={busy === s.id} onClick={() => onRevoke(s.id)}>
+            Stop sharing
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function PrescriptionView({ view, onDownload }) {
   const { prescription, medications, diagnosis, notes, integrity } = view;
@@ -75,17 +126,20 @@ export default function PatientPrescriptions() {
   const [prescriptions, setPrescriptions] = useState(null);
   const [requests, setRequests] = useState([]);
   const [open, setOpen] = useState(null);
-  const [copiedId, setCopiedId] = useState(null);
+  const [shares, setShares] = useState([]);
+  const [shareBusy, setShareBusy] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState("");
 
   async function load() {
-    const [rows, approvals] = await Promise.all([
+    const [rows, approvals, shareRows] = await Promise.all([
       api.getPatientPrescriptions().catch(() => null),
       api.getPrescriptionRequests().catch(() => []),
+      api.getPrescriptionShares().catch(() => []),
     ]);
     if (rows) setPrescriptions(rows);
     setRequests(approvals);
+    setShares(shareRows);
   }
 
   useEffect(() => {
@@ -122,11 +176,31 @@ export default function PatientPrescriptions() {
     }
   }
 
-  function copyId(id) {
-    navigator.clipboard.writeText(id).then(() => {
-      setCopiedId(id);
-      setTimeout(() => setCopiedId((cur) => (cur === id ? null : cur)), 1500);
-    });
+  async function share(prescriptionId, pharmacyLicenseId) {
+    setShareBusy("share");
+    setError("");
+    try {
+      await api.sharePrescription(prescriptionId, pharmacyLicenseId);
+      await load();
+      return true;
+    } catch (e) {
+      setError(e.message || "Couldn't share the prescription.");
+      return false;
+    } finally {
+      setShareBusy(null);
+    }
+  }
+
+  async function stopSharing(shareId) {
+    setShareBusy(shareId);
+    try {
+      await api.revokePrescriptionShare(shareId);
+      await load();
+    } catch (e) {
+      setError(e.message || "Couldn't stop sharing.");
+    } finally {
+      setShareBusy(null);
+    }
   }
 
   const pending = requests.filter((r) => r.status === "pending");
@@ -179,6 +253,13 @@ export default function PatientPrescriptions() {
             view={open}
             onDownload={() => api.downloadPatientPrescription(open.prescription.id, open.prescription.originalFilename || "prescription").catch((e) => setError(e.message))}
           />
+          <SharePanel
+            prescription={prescriptions?.find((p) => p.id === open.prescription.id) || open.prescription}
+            shares={shares}
+            onShare={share}
+            onRevoke={stopSharing}
+            busy={shareBusy}
+          />
         </div>
       )}
 
@@ -191,22 +272,21 @@ export default function PatientPrescriptions() {
                 <th>Prescription</th>
                 <th>Prescribed by</th>
                 <th>Issued</th>
-                <th>Prescription ID</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {prescriptions.map((p) => (
                 <tr key={p.id}>
-                  <td>{p.title || "Prescription"}</td>
+                  <td>
+                    {p.title || "Prescription"}
+                    {p.dispensedAt && <span className="badge badge-muted" style={{ marginLeft: 8 }}>Dispensed</span>}
+                    {shares.some((s) => s.prescriptionId === p.id && s.status === "active") && (
+                      <span className="badge badge-amber" style={{ marginLeft: 8 }}>Shared</span>
+                    )}
+                  </td>
                   <td style={{ color: "var(--muted)" }}>{p.doctorName || p.doctorEmail || "—"}</td>
                   <td style={{ color: "var(--muted)" }}>{fmtDate(p.createdAt)}</td>
-                  <td className="mono" style={{ fontSize: 12 }}>
-                    {p.id.slice(0, 8)}…{" "}
-                    <button className="btn btn-ghost btn-sm" onClick={() => copyId(p.id)} style={{ padding: "2px 8px", fontSize: 11 }}>
-                      {copiedId === p.id ? "Copied" : "Copy"}
-                    </button>
-                  </td>
                   <td style={{ textAlign: "right" }}>
                     <button className="btn btn-primary btn-sm" onClick={() => toggle(p.id)}>
                       {open?.prescription.id === p.id ? "Close" : "Open"}

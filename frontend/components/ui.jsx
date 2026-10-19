@@ -18,6 +18,9 @@ export function StatusBadge({ status }) {
     invalid: ["badge-red", "Invalid"],
     revoked: ["badge-red", "Revoked"],
     rejected: ["badge-red", "Rejected"],
+    verified: ["badge-mint", "Verified"],
+    failed: ["badge-red", "Failed"],
+    dispensed: ["badge-muted", "Dispensed"],
   };
   const [cls, label] = map[status] || ["badge-muted", status];
   return <span className={`badge ${cls}`}>{label}</span>;

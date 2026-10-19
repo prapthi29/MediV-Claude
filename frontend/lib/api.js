@@ -411,10 +411,32 @@ export const api = {
   viewPatientPrescription: (prescriptionId) =>
     request(`/patients/me/prescriptions/${prescriptionId}`),
 
-  verifyPrescription: (prescriptionId) =>
-    request(`/pharmacy/prescriptions/${prescriptionId}/verify`).then(
-      (r) => r.verification
-    ),
+  // ---------- pharmacy sharing ----------
+
+  sharePrescription: (prescriptionId, pharmacyLicenseId) =>
+    request(`/patients/me/prescriptions/${prescriptionId}/shares`, {
+      method: "POST",
+      body: { pharmacyLicenseId },
+    }).then((r) => r.share),
+
+  getPrescriptionShares: () =>
+    request("/patients/me/prescription-shares").then((r) => r.shares || []),
+
+  revokePrescriptionShare: (shareId) =>
+    request(`/patients/me/prescription-shares/${shareId}/revoke`, {
+      method: "POST",
+    }).then((r) => r.share),
+
+  getSharedWithPharmacy: () =>
+    request("/pharmacy/shares").then((r) => r.shares || []),
+
+  openSharedPrescription: (shareId) => request(`/pharmacy/shares/${shareId}`),
+
+  dispensePrescription: (shareId, password) =>
+    request(`/pharmacy/shares/${shareId}/dispense`, {
+      method: "POST",
+      body: { password },
+    }).then((r) => r.dispensed),
 
   getPatientPrescriptions: () =>
     request("/patients/me/prescriptions").then(

@@ -66,12 +66,10 @@ export function createPharmacyPrescriptionRouter(
     controller.pharmacyHistory
   );
 
-  router.get(
-    "/prescriptions/:prescriptionId/verify",
-    authenticate(authService),
-    authorize("pharmacy"),
-    controller.verifyForPharmacy
-  );
+  // Pharmacies only see prescriptions a patient shared with them in the last 30 minutes.
+  router.get("/shares", authenticate(authService), authorize("pharmacy"), controller.listSharedWithPharmacy);
+  router.get("/shares/:shareId", authenticate(authService), authorize("pharmacy"), controller.openForPharmacy);
+  router.post("/shares/:shareId/dispense", authenticate(authService), authorize("pharmacy"), controller.dispense);
 
   return router;
 }
@@ -104,6 +102,10 @@ export function createPatientPrescriptionRouter(
   router.post("/me/prescription-requests/:requestId/approve", authenticate(authService), authorize("patient"), controller.approve);
   router.post("/me/prescription-requests/:requestId/reject", authenticate(authService), authorize("patient"), controller.reject);
   router.post("/me/prescription-requests/:requestId/revoke", authenticate(authService), authorize("patient"), controller.revoke);
+
+  router.get("/me/prescription-shares", authenticate(authService), authorize("patient"), controller.listSharesForPatient);
+  router.post("/me/prescription-shares/:shareId/revoke", authenticate(authService), authorize("patient"), controller.revokeShare);
+  router.post("/me/prescriptions/:prescriptionId/shares", authenticate(authService), authorize("patient"), controller.share);
 
   router.get(
     "/me/prescriptions/:prescriptionId",

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import crypto from 'node:crypto';
-import { Wallet } from 'ethers';
+import { Wallet, getBytes, verifyMessage } from 'ethers';
+import { prescriptionRootSha256, medicationsSha256 } from '../src/services/prescription-document.js';
 import { FileEncryptionService } from '../src/encryption/file-encryption-service.js';
 import { PrescriptionService } from '../src/services/prescription-service.js';
 import { SigningKeyService } from '../src/services/signing-key-service.js';
@@ -21,6 +22,12 @@ class Prescriptions {
     return item;
   }
   async findById(id) { return this.items.find((item) => item.id === id) ?? null; }
+  async markDispensed(id, { pharmacyUserId, dispensedAt, signature, signerAddress }) {
+    const item = await this.findById(id);
+    if (!item || item.dispensed_at) return null;
+    Object.assign(item, { dispensed_at: dispensedAt, dispensed_by_user_id: pharmacyUserId, dispense_signature: signature, dispense_signer_address: signerAddress });
+    return item;
+  }
   async markBlockchainRegistered(id, registration) {
     const item = await this.findById(id);
     Object.assign(item, { blockchain_status: 'registered', blockchain_record_id: registration.blockchainRecordId, blockchain_tx_hash: registration.transactionHash });
@@ -44,6 +51,23 @@ class SigningKeys {
   }
   async findActiveForUser(userId) { return this.keys.find((k) => k.user_id === userId && k.status === 'active') ?? null; }
   async findByAddress(address) { return this.keys.find((k) => k.address.toLowerCase() === address.toLowerCase()) ?? null; }
+}
+
+class Shares {
+  constructor(prescriptions) { this.items = []; this.prescriptions = prescriptions; }
+  decorate(share) {
+    const p = this.prescriptions.items.find((x) => x.id === share.prescription_id);
+    return share && { ...share, patient_name: 'Ravi Patient', dispensed_at: p?.dispensed_at ?? null };
+  }
+  async create(input) {
+    const share = { id: crypto.randomUUID(), prescription_id: input.prescriptionId, patient_user_id: input.patientUserId, pharmacy_user_id: input.pharmacyUserId, expires_at: input.expiresAt, revoked_at: null, created_at: new Date() };
+    this.items.push(share);
+    return this.decorate(share);
+  }
+  live(s) { return !s.revoked_at && s.expires_at > new Date(); }
+  async findActiveForPair(prescriptionId, pharmacyId) { const s = this.items.find((x) => x.prescription_id === prescriptionId && x.pharmacy_user_id === pharmacyId && this.live(x)); return s ? this.decorate(s) : null; }
+  async findActiveForPharmacy(id, pharmacyId) { const s = this.items.find((x) => x.id === id && x.pharmacy_user_id === pharmacyId && this.live(x)); return s ? this.decorate(s) : null; }
+  async revokeForPatient(id, patientId) { const s = this.items.find((x) => x.id === id && x.patient_user_id === patientId && this.live(x)); if (!s) return null; s.revoked_at = new Date(); return this.decorate(s); }
 }
 
 class Approvals {
@@ -86,20 +110,25 @@ async function setup() {
   const users = {
     doctor: { id: 'doctor', role: 'doctor' },
     other: { id: 'other', role: 'doctor' },
+    pharmacy: { id: 'pharmacy', role: 'pharmacy', license_id: 'PH-001' },
+    pharmacy2: { id: 'pharmacy2', role: 'pharmacy', license_id: 'PH-002' },
     patient: { id: 'patient', role: 'patient', medical_record_status: 'active', blockchain_address: Wallet.createRandom().address }
   };
   const userRepository = {
     findById: async (id) => users[id],
+    findActivePharmacyByLicenseId: async (license) => Object.values(users).find((u) => u.role === 'pharmacy' && u.license_id === license) ?? null,
     updateBlockchainAddress: async (id, address) => { users[id].blockchain_address = address; }
   };
   const signingKeyService = new SigningKeyService({ signingKeyRepository: new SigningKeys(), userRepository });
   await signingKeyService.ensureKey(users.doctor, PASSWORD);
   await signingKeyService.ensureKey(users.other, PASSWORD);
+  await signingKeyService.ensureKey(users.pharmacy, PASSWORD);
   const prescriptionRepository = new Prescriptions();
   const storage = new Storage();
   const service = new PrescriptionService({
     prescriptionRepository,
     prescriptionApprovalRepository: new Approvals(),
+    prescriptionShareRepository: new Shares(prescriptionRepository),
     medicalStorage: storage,
     fileEncryptionService: new FileEncryptionService({ masterKey: Buffer.alloc(32, 5) }),
     userRepository,
@@ -113,14 +142,18 @@ async function setup() {
   return { service, users, prescriptionRepository, signingKeyService, storage };
 }
 
+async function integrityOf(service, repository, id) {
+  return (await service.open(await repository.findById(id))).integrity;
+}
+
 describe('prescription service', () => {
   it('signs with the doctor key after password entry and verifies it for a pharmacy', async () => {
-    const { service, users } = await setup();
+    const { service, users, prescriptionRepository } = await setup();
     const approvalId = await approved(service, 'doctor');
     const prescription = await service.create('doctor', 'patient', { ...form, approvalId, password: PASSWORD });
     expect(prescription.blockchainStatus).toBe('registered');
     expect(prescription.format).toBe('form');
-    await expect(service.verifyForPharmacy(prescription.id)).resolves.toMatchObject({ valid: true, signatureValid: true, contentHashValid: true, blockchainValid: true });
+    await expect(integrityOf(service, prescriptionRepository, prescription.id)).resolves.toMatchObject({ valid: true, signatureValid: true, contentHashValid: true, blockchainValid: true });
     const view = await service.viewForPatient('patient', prescription.id);
     expect(view.medications[0]).toMatchObject({ name: 'Amoxicillin', dose: '500 mg' });
     expect(view.integrity.valid).toBe(true);
@@ -154,7 +187,7 @@ describe('prescription service', () => {
       encrypted_data_key: encryption.encryptedDataKey, data_key_iv: encryption.dataKeyIv, data_key_auth_tag: encryption.dataKeyAuthTag,
       file_iv: encryption.fileIv, file_auth_tag: encryption.fileAuthTag
     });
-    await expect(service.verifyForPharmacy(prescription.id)).resolves.toMatchObject({ valid: false, contentHashValid: false, signatureValid: true });
+    await expect(integrityOf(service, prescriptionRepository, prescription.id)).resolves.toMatchObject({ valid: false, contentHashValid: false, signatureValid: true });
   });
 
   it('refuses to sign with a wrong password', async () => {
@@ -172,6 +205,51 @@ describe('prescription service', () => {
     const approvalId = await approved(service, 'other');
     const prescription = await service.create('other', 'patient', { ...form, approvalId, password: PASSWORD });
     prescriptionRepository.items[0].doctor_user_id = 'doctor';
-    await expect(service.verifyForPharmacy(prescription.id)).resolves.toMatchObject({ valid: false, signatureValid: false });
+    await expect(integrityOf(service, prescriptionRepository, prescription.id)).resolves.toMatchObject({ valid: false, signatureValid: false });
+  });
+
+  it('shows a shared pharmacy the medicines only, with a proof it can check itself', async () => {
+    const { service } = await setup();
+    const approvalId = await approved(service, 'doctor');
+    const prescription = await service.create('doctor', 'patient', { ...form, approvalId, password: PASSWORD });
+    const share = await service.shareWithPharmacy('patient', prescription.id, 'PH-001');
+    const opened = await service.openForPharmacy('pharmacy', share.id);
+
+    expect(opened.patientName).toBe('Ravi Patient');
+    expect(opened.medications[0].name).toBe('Amoxicillin');
+    expect(JSON.stringify(opened)).not.toContain(form.diagnosis);
+    expect(JSON.stringify(opened)).not.toContain(form.notes);
+
+    // What the pharmacy's browser does: rebuild the signed hash from the medicines.
+    const root = prescriptionRootSha256({
+      patientUserId: opened.proof.patientUserId,
+      medicationsHash: medicationsSha256(opened.medications),
+      clinicalHash: opened.proof.clinicalSha256
+    });
+    expect(root).toBe(opened.proof.rootSha256);
+    expect(verifyMessage(getBytes(`0x${root}`), opened.proof.signature)).toBe(opened.proof.signerAddress);
+
+    await expect(service.openForPharmacy('pharmacy2', share.id)).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
+  });
+
+  it('lets the pharmacy dispense once, signed with its own key', async () => {
+    const { service } = await setup();
+    const approvalId = await approved(service, 'doctor');
+    const prescription = await service.create('doctor', 'patient', { ...form, approvalId, password: PASSWORD });
+    const share = await service.shareWithPharmacy('patient', prescription.id, 'PH-001');
+
+    await expect(service.dispense('pharmacy', share.id, 'Wrong#Pass1234')).rejects.toMatchObject({ code: 'INVALID_SIGNING_PASSWORD' });
+    await expect(service.dispense('pharmacy', share.id, PASSWORD)).resolves.toMatchObject({ prescriptionId: prescription.id });
+    await expect(service.dispense('pharmacy', share.id, PASSWORD)).rejects.toMatchObject({ code: 'PRESCRIPTION_ALREADY_DISPENSED' });
+    await expect(service.shareWithPharmacy('patient', prescription.id, 'PH-002')).rejects.toMatchObject({ code: 'PRESCRIPTION_ALREADY_DISPENSED' });
+  });
+
+  it('closes a share as soon as the patient revokes it', async () => {
+    const { service } = await setup();
+    const approvalId = await approved(service, 'doctor');
+    const prescription = await service.create('doctor', 'patient', { ...form, approvalId, password: PASSWORD });
+    const share = await service.shareWithPharmacy('patient', prescription.id, 'PH-001');
+    await service.revokeShare('patient', share.id);
+    await expect(service.openForPharmacy('pharmacy', share.id)).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
   });
 });

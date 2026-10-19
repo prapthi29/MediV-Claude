@@ -117,11 +117,11 @@ export default function PatientDashboard() {
               <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 4 }}>Prescriptions</div>
               <div style={{ fontSize: 16, fontWeight: 700 }}>{prescriptionCount ?? "—"}</div>
               <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-                Each has its own ID — see{" "}
+                Share one with a pharmacy from{" "}
                 <a href="/patient/prescriptions" style={{ color: "var(--primary)" }}>
                   Prescriptions
-                </a>{" "}
-                to copy one for a pharmacy.
+                </a>
+                .
               </div>
             </div>
           </div>

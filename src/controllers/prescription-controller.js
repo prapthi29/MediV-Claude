@@ -22,6 +22,9 @@ const createBody = z.object({
 const prescriptionId = z.object({ prescriptionId: z.string().uuid() });
 const patientParams = z.object({ patientId });
 const requestParams = z.object({ requestId: z.string().uuid() });
+const shareParams = z.object({ shareId: z.string().uuid() });
+const shareBody = z.object({ pharmacyLicenseId: z.string().trim().min(1).max(100) }).strict();
+const dispenseBody = z.object({ password: z.string().min(1).max(128) }).strict();
 
 export function createPrescriptionController(prescriptionService) {
   const decide = (decision) => asyncHandler(async (req, res) => {
@@ -66,9 +69,29 @@ export function createPrescriptionController(prescriptionService) {
     pharmacyHistory: asyncHandler(async (req, res) => {
       res.json({ history: await prescriptionService.listPharmacyHistory(req.user.sub) });
     }),
-    verifyForPharmacy: asyncHandler(async (req, res) => {
+    share: asyncHandler(async (req, res) => {
       const { prescriptionId: id } = prescriptionId.parse(req.params);
-      res.json({ verification: await prescriptionService.verifyForPharmacy(id, req.user.sub) });
+      const { pharmacyLicenseId } = shareBody.parse(req.body);
+      res.status(201).json({ share: await prescriptionService.shareWithPharmacy(req.user.sub, id, pharmacyLicenseId) });
+    }),
+    listSharesForPatient: asyncHandler(async (req, res) => {
+      res.json({ shares: await prescriptionService.listSharesForPatient(req.user.sub) });
+    }),
+    revokeShare: asyncHandler(async (req, res) => {
+      const { shareId } = shareParams.parse(req.params);
+      res.json({ share: await prescriptionService.revokeShare(req.user.sub, shareId) });
+    }),
+    listSharedWithPharmacy: asyncHandler(async (req, res) => {
+      res.json({ shares: await prescriptionService.listSharedWithPharmacy(req.user.sub) });
+    }),
+    openForPharmacy: asyncHandler(async (req, res) => {
+      const { shareId } = shareParams.parse(req.params);
+      res.json(await prescriptionService.openForPharmacy(req.user.sub, shareId));
+    }),
+    dispense: asyncHandler(async (req, res) => {
+      const { shareId } = shareParams.parse(req.params);
+      const { password } = dispenseBody.parse(req.body);
+      res.json({ dispensed: await prescriptionService.dispense(req.user.sub, shareId, password) });
     })
   };
 }

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { AppError } from '../utils/app-error.js';
 import { SigningKeyService } from './signing-key-service.js';
 import { assertProfileActive } from './profile-activation.js';
+import { stableStringify } from './basic-profile-signature.js';
 import {
   PRESCRIPTION_CONTENT_TYPE,
   buildPrescription,
@@ -13,12 +14,15 @@ import {
 
 // A prescription approval lasts as long as the doctor's license link.
 const APPROVAL_MINUTES = 30;
+// A pharmacy can see a shared prescription for 30 minutes.
+export const SHARE_MINUTES = 30;
 
 export class PrescriptionService {
-  constructor({ prescriptionRepository, prescriptionApprovalRepository, medicalStorage, fileEncryptionService, userRepository, consentService, recordRegistryClient, auditService, signingKeyService }) {
+  constructor({ prescriptionRepository, prescriptionApprovalRepository, prescriptionShareRepository, medicalStorage, fileEncryptionService, userRepository, consentService, recordRegistryClient, auditService, signingKeyService }) {
     this.signingKeyService = signingKeyService;
     this.prescriptionRepository = prescriptionRepository;
     this.prescriptionApprovalRepository = prescriptionApprovalRepository;
+    this.prescriptionShareRepository = prescriptionShareRepository;
     this.medicalStorage = medicalStorage;
     this.fileEncryptionService = fileEncryptionService;
     this.userRepository = userRepository;
@@ -197,18 +201,142 @@ export class PrescriptionService {
     return this.auditService.auditRepository.listForPharmacy(pharmacyUserId);
   }
 
-  async verifyForPharmacy(prescriptionId, pharmacyUserId) {
-    const prescription = await this.prescriptionRepository.findById(prescriptionId);
-    if (!prescription) throw new AppError(404, 'Prescription not found.', 'PRESCRIPTION_NOT_FOUND');
-    const { integrity } = await this.open(prescription);
-    const verification = {
+  // --------------------------------------------------
+  // SHARING WITH A PHARMACY
+  // --------------------------------------------------
+
+  async shareWithPharmacy(patientUserId, prescriptionId, pharmacyLicenseId) {
+    const prescription = await this.findForPatient(patientUserId, prescriptionId);
+    if (prescription.format !== 'form') {
+      throw new AppError(409, 'Only typed prescriptions can be shared with a pharmacy.', 'PRESCRIPTION_NOT_SHAREABLE');
+    }
+    if (prescription.dispensed_at) {
+      throw new AppError(409, 'This prescription has already been dispensed.', 'PRESCRIPTION_ALREADY_DISPENSED');
+    }
+    const pharmacy = await this.userRepository.findActivePharmacyByLicenseId(pharmacyLicenseId);
+    if (!pharmacy) {
+      throw new AppError(404, 'No approved pharmacy has that ID.', 'PHARMACY_NOT_FOUND');
+    }
+
+    const existing = await this.prescriptionShareRepository.findActiveForPair(prescription.id, pharmacy.id);
+    if (existing) return this.publicShare(existing);
+
+    const share = await this.prescriptionShareRepository.create({
       prescriptionId: prescription.id,
-      doctorUserId: prescription.doctor_user_id,
+      patientUserId,
+      pharmacyUserId: pharmacy.id,
+      expiresAt: new Date(Date.now() + SHARE_MINUTES * 60 * 1000)
+    });
+    await this.auditService?.record({ eventType: 'prescription_shared', actorUserId: patientUserId, subjectUserId: pharmacy.id, resourceType: 'prescription', resourceId: prescription.id, metadata: { shareId: share.id }, expiresAt: share.expires_at });
+    return this.publicShare(share);
+  }
+
+  async listSharesForPatient(patientUserId) {
+    const shares = await this.prescriptionShareRepository.listForPatient(patientUserId);
+    return shares.map((share) => this.publicShare(share));
+  }
+
+  async revokeShare(patientUserId, shareId) {
+    const share = await this.prescriptionShareRepository.revokeForPatient(shareId, patientUserId);
+    if (!share) throw new AppError(409, 'This share has already ended.', 'SHARE_NOT_ACTIVE');
+    await this.auditService?.record({ eventType: 'prescription_share_revoked', actorUserId: patientUserId, subjectUserId: share.pharmacy_user_id, resourceType: 'prescription', resourceId: share.prescription_id, metadata: { shareId: share.id } });
+    return this.publicShare(share);
+  }
+
+  async listSharedWithPharmacy(pharmacyUserId) {
+    const shares = await this.prescriptionShareRepository.listActiveForPharmacy(pharmacyUserId);
+    return shares.map((share) => this.publicShare(share));
+  }
+
+  async requireShare(pharmacyUserId, shareId) {
+    const share = await this.prescriptionShareRepository.findActiveForPharmacy(shareId, pharmacyUserId);
+    if (!share) {
+      throw new AppError(403, 'This prescription is not shared with you, or the 30 minutes have passed.', 'SHARE_NOT_ACTIVE');
+    }
+    const prescription = await this.prescriptionRepository.findById(share.prescription_id);
+    return { share, prescription };
+  }
+
+  // The pharmacy sees the patient's name and the medicines only, plus the
+  // hashes and signature it needs to check the doctor's signature itself.
+  async openForPharmacy(pharmacyUserId, shareId) {
+    const { share, prescription } = await this.requireShare(pharmacyUserId, shareId);
+    const { document, integrity } = await this.open(prescription);
+    const doctor = await this.userRepository.findById(prescription.doctor_user_id);
+    const medications = document?.medications ?? [];
+
+    await this.auditService?.record({
+      eventType: 'prescription_verified', actorUserId: pharmacyUserId, subjectUserId: prescription.patient_user_id,
+      resourceType: 'prescription', resourceId: prescription.id,
+      metadata: { valid: integrity.valid, prescriptionId: prescription.id, medication_summary: medications.map((m) => m.name).join(', ') }
+    });
+
+    return {
+      share: this.publicShare(share),
+      patientName: share.patient_name,
+      doctorName: doctor?.name ?? null,
+      doctorLicenseId: doctor?.license_id ?? null,
       issuedAt: prescription.created_at,
-      ...integrity
+      medications,
+      proof: {
+        type: 'medivault-prescription/1',
+        patientUserId: prescription.patient_user_id,
+        medicationsSha256: prescription.medications_sha256,
+        clinicalSha256: prescription.clinical_sha256,
+        rootSha256: prescription.content_sha256,
+        signature: prescription.doctor_signature,
+        signerAddress: prescription.signer_address
+      },
+      integrity,
+      dispensed: prescription.dispensed_at ? { at: prescription.dispensed_at, byUserId: prescription.dispensed_by_user_id } : null
     };
-    await this.auditService?.record({ eventType: 'prescription_verified', actorUserId: pharmacyUserId, subjectUserId: prescription.patient_user_id, resourceType: 'prescription', resourceId: prescription.id, metadata: { valid: verification.valid, prescriptionId: prescription.id } });
-    return verification;
+  }
+
+  // The pharmacy signs the dispense with its own key. A prescription is dispensed once.
+  async dispense(pharmacyUserId, shareId, password) {
+    const { prescription } = await this.requireShare(pharmacyUserId, shareId);
+    if (prescription.dispensed_at) {
+      throw new AppError(409, 'This prescription has already been dispensed.', 'PRESCRIPTION_ALREADY_DISPENSED');
+    }
+    const { integrity } = await this.open(prescription);
+    if (!integrity.valid) {
+      throw new AppError(409, 'This prescription failed verification and cannot be dispensed.', 'PRESCRIPTION_NOT_VERIFIED');
+    }
+
+    const dispensedAt = new Date();
+    const digest = crypto.createHash('sha256').update(stableStringify({
+      type: 'medivault-dispense/1',
+      prescriptionId: prescription.id,
+      prescriptionSha256: prescription.content_sha256,
+      pharmacyUserId,
+      dispensedAt: dispensedAt.toISOString()
+    }), 'utf8').digest('hex');
+    const { signature, signerAddress } = await this.signingKeyService.signDigest(pharmacyUserId, password, digest);
+
+    const updated = await this.prescriptionRepository.markDispensed(prescription.id, { pharmacyUserId, dispensedAt, signature, signerAddress });
+    if (!updated) {
+      throw new AppError(409, 'This prescription has already been dispensed.', 'PRESCRIPTION_ALREADY_DISPENSED');
+    }
+    await this.auditService?.record({ eventType: 'prescription_dispensed', actorUserId: pharmacyUserId, subjectUserId: prescription.patient_user_id, resourceType: 'prescription', resourceId: prescription.id, metadata: { dispenseSha256: digest, signerAddress } });
+    return { prescriptionId: prescription.id, dispensedAt: updated.dispensed_at };
+  }
+
+  publicShare(share) {
+    const active = !share.revoked_at && new Date(share.expires_at) > new Date();
+    return {
+      id: share.id,
+      prescriptionId: share.prescription_id,
+      prescriptionTitle: share.prescription_title ?? null,
+      patientName: share.patient_name ?? null,
+      pharmacyName: share.pharmacy_name ?? null,
+      pharmacyLicenseId: share.pharmacy_license_id ?? null,
+      doctorName: share.doctor_name ?? null,
+      issuedAt: share.issued_at ?? null,
+      dispensedAt: share.dispensed_at ?? null,
+      status: share.dispensed_at ? 'dispensed' : share.revoked_at ? 'revoked' : active ? 'active' : 'expired',
+      expiresAt: share.expires_at,
+      createdAt: share.created_at
+    };
   }
 
   async registerOnChain(prescription) {
@@ -256,6 +384,7 @@ export class PrescriptionService {
     return {
       id: prescription.id, patientUserId: prescription.patient_user_id, doctorUserId: prescription.doctor_user_id,
       doctorName: prescription.doctor_name ?? null, format: prescription.format ?? 'file',
+      dispensedAt: prescription.dispensed_at ?? null,
       originalFilename: prescription.original_filename, contentType: prescription.content_type, sizeBytes: prescription.size_bytes,
       title: prescription.title, blockchainStatus: prescription.blockchain_status, createdAt: prescription.created_at
     };

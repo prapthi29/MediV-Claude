@@ -27,6 +27,17 @@ export class UserRepository {
     return result.rows[0] ?? null;
   }
 
+  async findActivePharmacyByLicenseId(licenseId) {
+    const result = await this.database.query(
+      `SELECT id, name, email, role, status, license_id, blockchain_address
+       FROM users
+       WHERE role = 'pharmacy' AND status = 'active' AND LOWER(BTRIM(license_id)) = LOWER(BTRIM($1))
+       LIMIT 1`,
+      [licenseId]
+    );
+    return result.rows[0] ?? null;
+  }
+
   async findActiveDoctorByLicenseId(licenseId) {
     const result = await this.database.query(
       `SELECT id, name, email, role, status, patient_id, license_id, created_at

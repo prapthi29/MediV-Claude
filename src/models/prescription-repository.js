@@ -47,6 +47,18 @@ export class PrescriptionRepository {
     return result.rows[0];
   }
 
+  // Only the first dispense succeeds.
+  async markDispensed(id, { pharmacyUserId, dispensedAt, signature, signerAddress }) {
+    const result = await this.database.query(
+      `UPDATE prescriptions
+       SET dispensed_at = $2, dispensed_by_user_id = $3, dispense_signature = $4, dispense_signer_address = $5
+       WHERE id = $1 AND dispensed_at IS NULL
+       RETURNING *`,
+      [id, dispensedAt, pharmacyUserId, signature, signerAddress]
+    );
+    return result.rows[0] ?? null;
+  }
+
   async markBlockchainFailed(id) {
     await this.database.query("UPDATE prescriptions SET blockchain_status = 'failed' WHERE id = $1", [id]);
   }

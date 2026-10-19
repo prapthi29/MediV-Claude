@@ -138,6 +138,12 @@ A prescription is a typed form: one or more medicines (name, dose, how often, fo
 
 The hash the doctor signs and registers on-chain is built from two parts: `sha256({ type, patientUserId, medicationsSha256, clinicalSha256 })` (see `src/services/prescription-document.js`). This lets a pharmacy check the doctor's signature against the medicines alone, without seeing the diagnosis or advice. The stored document is encrypted with AES-256-GCM. Older prescriptions uploaded as files still open and verify.
 
+## Pharmacy sharing
+
+A patient opens a typed prescription and shares it with a pharmacy by entering the pharmacy's ID (its license number, shown on the pharmacy's portal). The share lasts 30 minutes and the patient can stop it sooner (`POST /api/v1/patients/me/prescriptions/:id/shares`, `POST /api/v1/patients/me/prescription-shares/:shareId/revoke`).
+
+The pharmacy sees only prescriptions shared with it (`GET /api/v1/pharmacy/shares`). Opening one returns the patient's name, the prescribing doctor, the medicines, and a proof: the medicines hash, the clinical-part hash, the signed root hash, the doctor's signature and signer address. The pharmacy's browser rebuilds the root hash from the medicines and recovers the signer from the signature (`frontend/lib/verify-prescription.js`), so it does not rely on the server's word; the diagnosis and advice never leave the server. The pharmacy marks it dispensed by signing with its own key (`POST /api/v1/pharmacy/shares/:shareId/dispense`). A prescription can be dispensed once, and a dispensed prescription can no longer be shared.
+
 ## Emergency access and audit trail
 
 Glass-break access is for emergencies when the patient cannot link the doctor. The doctor enters the patient's health ID (`MV-…`), a reason, and 15, 30 or 45 minutes, and signs the request with their password (`POST /api/v1/emergency-access`). The server signs the canonical request with the doctor's key, verifies the signature against a key the doctor owns, and only then opens access. The doctor can see the patient's basic profile only (`GET /api/v1/emergency-access/patients/:patientId/basic-profile`), with its signature checks.

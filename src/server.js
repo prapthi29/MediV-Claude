@@ -12,6 +12,7 @@ import { MedicalRecordRepository } from './models/medical-record-repository.js';
 import { ConsentRepository } from './models/consent-repository.js';
 import { PrescriptionRepository } from './models/prescription-repository.js';
 import { PrescriptionApprovalRepository } from './models/prescription-approval-repository.js';
+import { PrescriptionShareRepository } from './models/prescription-share-repository.js';
 import { AuditRepository } from './models/audit-repository.js';
 import { EmergencyAccessRepository } from './models/emergency-access-repository.js';
 import { EmergencyProfileRepository } from './models/emergency-profile-repository.js';
@@ -138,6 +139,7 @@ const walletService = new WalletService({
 const prescriptionService = new PrescriptionService({
   prescriptionRepository: new PrescriptionRepository(database),
   prescriptionApprovalRepository: new PrescriptionApprovalRepository(database),
+  prescriptionShareRepository: new PrescriptionShareRepository(database),
   medicalStorage: createMedicalStorage(config),
   fileEncryptionService,
   userRepository,

@@ -74,7 +74,7 @@ export default function Sidebar({ role, userLabel }) {
     ],
 
     pharmacy: [
-      { href: "/pharmacy/verify", label: "Verify prescription", icon: ICONS.verify },
+      { href: "/pharmacy/verify", label: "Shared prescriptions", icon: ICONS.verify },
       { href: "/pharmacy/history", label: "Verification history", icon: ICONS.history },
     ],
   };

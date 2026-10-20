@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import PortalShell from "../../../components/PortalShell";
+import { FieldError, scrollToField } from "../../../components/FieldError";
 import { EmptyState, fmtDate } from "../../../components/ui";
 import { api } from "../../../lib/api";
 
@@ -122,6 +123,8 @@ function ListEditor({
   onItems,
   fields,
   addLabel,
+  fieldKey,
+  error,
 }) {
   function updateItem(index, field, value) {
     onItems(
@@ -144,7 +147,7 @@ function ListEditor({
   }
 
   return (
-    <section className="card card-pad" style={{ marginBottom: 16 }}>
+    <section className="card card-pad" style={{ marginBottom: 16 }} data-field={fieldKey}>
       <h3 style={{ marginTop: 0 }}>{title}</h3>
 
       <label style={{ display: "block", marginBottom: 8 }}>
@@ -255,6 +258,7 @@ function ListEditor({
           + {addLabel}
         </button>
       )}
+      <FieldError message={error} />
     </section>
   );
 }
@@ -275,6 +279,7 @@ export default function DoctorEmergencyProfiles() {
   const [activeApproval, setActiveApproval] = useState(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
@@ -462,9 +467,23 @@ export default function DoctorEmergencyProfiles() {
 
   function setField(field, value) {
     setForm((previous) => ({ ...previous, [field]: value }));
+    clearFieldError(field);
   }
 
+  function clearFieldError(field) {
+    setFieldErrors((previous) => {
+      if (!previous[field] && !previous.submit) return previous;
+      const { [field]: _removed, submit: _submit, ...rest } = previous;
+      return rest;
+    });
+  }
+
+  // Collects every problem, keyed by the field it belongs under.
   function validateForm() {
+    const errs = {};
+    const add = (key, message) => {
+      if (!errs[key]) errs[key] = message;
+    };
     for (const [
       statusKey,
       itemsKey,
@@ -493,11 +512,11 @@ export default function DoctorEmergencyProfiles() {
       const items = form[itemsKey];
 
       if (form[statusKey] === "provided" && items.length === 0) {
-        return `${label}: add at least one item or select another status.`;
+        add(itemsKey, `Add at least one item, or choose another status.`);
       }
 
       if (form[statusKey] !== "provided" && items.length > 0) {
-        return `${label}: clear the entries or select Provided.`;
+        add(itemsKey, `Clear the entries, or choose Recorded.`);
       }
 
       for (const item of items) {
@@ -506,40 +525,44 @@ export default function DoctorEmergencyProfiles() {
             (field) => !String(item[field] || "").trim()
           )
         ) {
-          return `Complete all required fields for ${label.toLowerCase()}.`;
+          add(itemsKey, `Fill in every required field for ${label.toLowerCase()}.`);
         }
       }
     }
 
     if (creating) {
-      if (!form.gender) return "Select the patient's gender.";
-      if (!form.dateOfBirth) return "Enter the patient's date of birth.";
-      if (!form.bloodGroup) return "Select the patient's blood group.";
-      if (!form.emergencyContactName.trim() || !form.emergencyContactPhone.trim()) {
-        return "Enter the emergency contact's name and phone number.";
+      if (!form.gender) add("gender", "Select the patient's gender.");
+      if (!form.dateOfBirth) add("dateOfBirth", "Enter the patient's date of birth.");
+      if (!form.bloodGroup) add("bloodGroup", "Select the patient's blood group.");
+      if (!form.emergencyContactName.trim()) {
+        add("emergencyContactName", "Enter the emergency contact's name.");
+      }
+      if (!form.emergencyContactPhone.trim()) {
+        add("emergencyContactPhone", "Enter the emergency contact's phone number.");
       }
     }
     if (form.dateOfBirth && form.dateOfBirth > new Date().toISOString().slice(0, 10)) {
-      return "Date of birth cannot be in the future.";
+      add("dateOfBirth", "Date of birth cannot be in the future.");
     }
 
-    if (!reason.trim()) return "Enter a reason for this change.";
-    if (!password) return "Enter your password to confirm this profile.";
+    if (!reason.trim()) add("reason", "Enter a reason for this change.");
+    if (!password) add("password", "Enter your password to confirm this profile.");
     if (!activeApproval?.id) {
-      return "An approved permission is required before saving.";
+      add("submit", "An approved permission is required before saving.");
     }
 
-    return "";
+    return errs;
   }
 
   async function saveProfile() {
     setError("");
     setNotice("");
 
-    const validationError = validateForm();
+    const errs = validateForm();
+    setFieldErrors(errs);
 
-    if (validationError) {
-      setError(validationError);
+    if (Object.keys(errs).length) {
+      scrollToField(Object.keys(errs));
       return;
     }
 
@@ -549,9 +572,9 @@ export default function DoctorEmergencyProfiles() {
       (creating && approval.operation !== "create") ||
       (!creating && approval.operation !== "update")
     ) {
-      setError(
-        "The approved permission does not match this operation. Request the correct permission."
-      );
+      setFieldErrors({
+        submit: "The approved permission does not match this operation. Request the correct permission.",
+      });
       return;
     }
 
@@ -601,7 +624,7 @@ export default function DoctorEmergencyProfiles() {
 
       await loadRequests(patientId);
     } catch (err) {
-      setError(err.message || "Unable to save the basic profile.");
+      setFieldErrors({ submit: err.message || "Unable to save the basic profile." });
     } finally {
       setSaving(false);
     }
@@ -819,6 +842,7 @@ export default function DoctorEmergencyProfiles() {
                 className="input"
                 value={form.gender}
                 onChange={(event) => setField("gender", event.target.value)}
+                data-field="gender"
                 style={{ display: "block", width: "100%", marginTop: 5 }}
               >
                 <option value="">Select</option>
@@ -828,6 +852,7 @@ export default function DoctorEmergencyProfiles() {
                   </option>
                 ))}
               </select>
+              <FieldError message={fieldErrors.gender} />
             </label>
 
             <label style={{ display: "block", marginBottom: 12 }}>
@@ -838,6 +863,7 @@ export default function DoctorEmergencyProfiles() {
                 value={form.dateOfBirth}
                 max={new Date().toISOString().slice(0, 10)}
                 onChange={(event) => setField("dateOfBirth", event.target.value)}
+                data-field="dateOfBirth"
                 style={{ display: "block", width: "100%", marginTop: 5 }}
               />
               {ageFrom(form.dateOfBirth) !== null && (
@@ -845,6 +871,7 @@ export default function DoctorEmergencyProfiles() {
                   Age {ageFrom(form.dateOfBirth)}
                 </span>
               )}
+              <FieldError message={fieldErrors.dateOfBirth} />
             </label>
 
             <label style={{ display: "block", marginBottom: 12 }}>
@@ -855,6 +882,7 @@ export default function DoctorEmergencyProfiles() {
                 onChange={(event) =>
                   setField("bloodGroup", event.target.value)
                 }
+                data-field="bloodGroup"
                 style={{
                   display: "block",
                   width: "100%",
@@ -868,6 +896,7 @@ export default function DoctorEmergencyProfiles() {
                   </option>
                 ))}
               </select>
+              <FieldError message={fieldErrors.bloodGroup} />
             </label>
 
             {[
@@ -888,18 +917,22 @@ export default function DoctorEmergencyProfiles() {
                   value={form[key]}
                   maxLength={key === "emergencyContactPhone" ? 30 : 200}
                   onChange={(event) => setField(key, event.target.value)}
+                  data-field={key}
                   style={{
                     display: "block",
                     width: "100%",
                     marginTop: 5,
                   }}
                 />
+                <FieldError message={fieldErrors[key]} />
               </label>
             ))}
           </section>
 
           <ListEditor
             title="Allergies"
+            fieldKey="allergies"
+            error={fieldErrors.allergies}
             status={form.allergiesStatus}
             onStatus={(value) => setField("allergiesStatus", value)}
             items={form.allergies}
@@ -918,6 +951,8 @@ export default function DoctorEmergencyProfiles() {
 
           <ListEditor
             title="Chronic conditions"
+            fieldKey="chronicConditions"
+            error={fieldErrors.chronicConditions}
             status={form.chronicConditionsStatus}
             onStatus={(value) =>
               setField("chronicConditionsStatus", value)
@@ -937,6 +972,8 @@ export default function DoctorEmergencyProfiles() {
 
           <ListEditor
             title="Current medications"
+            fieldKey="currentMedications"
+            error={fieldErrors.currentMedications}
             status={form.medicationsStatus}
             onStatus={(value) => setField("medicationsStatus", value)}
             items={form.currentMedications}
@@ -967,7 +1004,11 @@ export default function DoctorEmergencyProfiles() {
               <textarea
                 className="input"
                 value={reason}
-                onChange={(event) => setReason(event.target.value)}
+                onChange={(event) => {
+                  setReason(event.target.value);
+                  clearFieldError("reason");
+                }}
+                data-field="reason"
                 maxLength={1000}
                 rows={3}
                 placeholder="Document why these details are being recorded or changed."
@@ -977,6 +1018,7 @@ export default function DoctorEmergencyProfiles() {
                   marginTop: 5,
                 }}
               />
+              <FieldError message={fieldErrors.reason} />
             </label>
 
             <label style={{ display: "block", marginBottom: 12 }}>
@@ -986,13 +1028,22 @@ export default function DoctorEmergencyProfiles() {
                 type="password"
                 autoComplete="current-password"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  clearFieldError("password");
+                }}
+                data-field="password"
                 style={{ display: "block", width: "100%", marginTop: 5 }}
               />
               <span style={{ color: "var(--muted)", fontSize: 13 }}>
                 Confirms that you are saving this profile.
               </span>
+              <FieldError message={fieldErrors.password} />
             </label>
+
+            <div data-field="submit">
+              <FieldError message={fieldErrors.submit} />
+            </div>
 
             <button
               type="button"

@@ -4,6 +4,7 @@ import Link from "next/link";
 import PortalShell from "../../../../components/PortalShell";
 import { DiagnosisFields, RECORD_TYPES } from "../../../../components/DiagnosisRecord";
 import { api } from "../../../../lib/api";
+import { FieldError, scrollToField } from "../../../../components/FieldError";
 
 export default function EditRecord() {
   const [ids, setIds] = useState({ patientId: "", recordId: "" });
@@ -16,6 +17,7 @@ export default function EditRecord() {
   const [file, setFile] = useState(null);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(null);
 
@@ -70,10 +72,14 @@ export default function EditRecord() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    // Each problem is shown under its own field; the page scrolls to the first.
     const hasForm = Object.values(form).some((v) => v && String(v).trim());
-    if (hasForm && !form.diagnosis?.trim()) return setError("Enter the diagnosis, or clear the form.");
-    if (!hasForm && !file && !(keepFile && current?.attachment)) return setError("The record needs a form, a file, or both.");
-    if (!password) return setError("Enter your password to confirm the new version.");
+    const errs = {};
+    if (hasForm && !form.diagnosis?.trim()) errs["dx-diagnosis"] = "Enter the diagnosis, or clear the form.";
+    if (!hasForm && !file && !(keepFile && current?.attachment)) errs.file = "The record needs a form, a file, or both.";
+    if (!password) errs.password = "Enter your password to confirm the new version.";
+    setFieldErrors(errs);
+    if (Object.keys(errs).length) return scrollToField(Object.keys(errs));
     setBusy(true);
     try {
       const updated = await api.saveRecord({
@@ -92,7 +98,8 @@ export default function EditRecord() {
       setPassword("");
       await load();
     } catch (err) {
-      setError(err.message || "Couldn't save the new version.");
+      setFieldErrors({ submit: err.message || "Couldn't save the new version." });
+      scrollToField("submit");
     } finally {
       setBusy(false);
     }
@@ -143,7 +150,14 @@ export default function EditRecord() {
                 ))}
               </select>
             </div>
-            <DiagnosisFields value={form} onChange={setForm} />
+            <DiagnosisFields
+              value={form}
+              errors={fieldErrors}
+              onChange={(next) => {
+                setFieldErrors({});
+                setForm(next);
+              }}
+            />
             <div className="field">
               <label>File</label>
               {current.attachment && (
@@ -152,12 +166,35 @@ export default function EditRecord() {
                   Keep the current file ({current.attachment.filename})
                 </label>
               )}
-              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+              <input
+                type="file"
+                data-field="file"
+                accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                onChange={(e) => {
+                  setFieldErrors({});
+                  setFile(e.target.files?.[0] || null);
+                }}
+              />
               <div className="field-hint">A new file replaces the current one.</div>
+              <FieldError message={fieldErrors.file} />
             </div>
             <div className="field">
               <label htmlFor="sign-password">Your password</label>
-              <input id="sign-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <input
+                id="sign-password"
+                data-field="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => {
+                  setFieldErrors(({ password: _p, submit: _s, ...rest }) => rest);
+                  setPassword(e.target.value);
+                }}
+              />
+              <FieldError message={fieldErrors.password} />
+            </div>
+            <div data-field="submit">
+              <FieldError message={fieldErrors.submit} />
             </div>
             <button className="btn btn-primary" type="submit" disabled={busy}>
               {busy ? "Saving…" : "Save new version"}

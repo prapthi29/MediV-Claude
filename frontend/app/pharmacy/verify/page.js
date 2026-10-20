@@ -4,6 +4,7 @@ import PortalShell from "../../../components/PortalShell";
 import TimeLeft from "../../../components/TimeLeft";
 import { EmptyState, StatusBadge, fmtDateTime } from "../../../components/ui";
 import { api } from "../../../lib/api";
+import { FieldError } from "../../../components/FieldError";
 import { verifyPrescriptionInBrowser } from "../../../lib/verify-prescription";
 
 export default function SharedPrescriptions() {
@@ -11,6 +12,7 @@ export default function SharedPrescriptions() {
   const [open, setOpen] = useState(null);
   const [browserCheck, setBrowserCheck] = useState(null);
   const [password, setPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -36,6 +38,7 @@ export default function SharedPrescriptions() {
     try {
       const view = await api.openSharedPrescription(shareId);
       setOpen(view);
+      setPasswordError("");
       setBrowserCheck(await verifyPrescriptionInBrowser(view.medications, view.proof));
     } catch (err) {
       setOpen(null);
@@ -46,7 +49,7 @@ export default function SharedPrescriptions() {
 
   async function dispense(e) {
     e.preventDefault();
-    if (!password) return setError("Enter your password to confirm.");
+    if (!password) return setPasswordError("Enter your password to confirm.");
     setBusy(true);
     setError("");
     try {
@@ -58,7 +61,7 @@ export default function SharedPrescriptions() {
       setNotice("Marked as dispensed. This prescription is no longer available to you; it's listed in your dispensing history.");
       load();
     } catch (err) {
-      setError(err.message || "Couldn't mark this prescription as dispensed.");
+      setPasswordError(err.message || "Couldn't mark this prescription as dispensed.");
     } finally {
       setBusy(false);
     }
@@ -189,14 +192,26 @@ export default function SharedPrescriptions() {
           {open.dispensed ? (
             <p style={{ fontWeight: 600, margin: 0 }}>Dispensed on {fmtDateTime(open.dispensed.at)}.</p>
           ) : verified ? (
-            <form onSubmit={dispense} style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-              <div className="field" style={{ marginBottom: 0, flex: "1 1 240px" }}>
-                <label htmlFor="dispense-password">Your password</label>
-                <input id="dispense-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <form onSubmit={dispense}>
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+                <div className="field" style={{ marginBottom: 0, flex: "1 1 240px" }}>
+                  <label htmlFor="dispense-password">Your password</label>
+                  <input
+                    id="dispense-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => {
+                      setPasswordError("");
+                      setPassword(e.target.value);
+                    }}
+                  />
+                </div>
+                <button className="btn btn-primary" type="submit" disabled={busy}>
+                  {busy ? "Saving…" : "Mark as dispensed"}
+                </button>
               </div>
-              <button className="btn btn-primary" type="submit" disabled={busy}>
-                {busy ? "Saving…" : "Mark as dispensed"}
-              </button>
+              <FieldError message={passwordError} />
             </form>
           ) : (
             <p style={{ color: "var(--red)", fontWeight: 600, margin: 0 }}>Do not dispense this prescription.</p>

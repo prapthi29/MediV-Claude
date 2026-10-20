@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "../lib/api";
+import { FieldError, scrollToField } from "./FieldError";
 
 const EMPTY_MED = { name: "", dose: "", frequency: "", duration: "", instructions: "" };
 const MED_FIELDS = [
@@ -22,6 +23,7 @@ export default function PrescriptionForm({ patientId, patient }) {
   const [medications, setMedications] = useState([{ ...EMPTY_MED }]);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [issued, setIssued] = useState(null);
 
@@ -47,9 +49,22 @@ export default function PrescriptionForm({ patientId, patient }) {
     return () => clearInterval(timer);
   }, [approval, loadApproval]);
 
-  const set = (key, value) => setFields((f) => ({ ...f, [key]: value }));
+  function clearFieldError(key) {
+    setFieldErrors((errs) => {
+      if (!errs[key] && !errs.submit) return errs;
+      const { [key]: _gone, submit: _submit, ...rest } = errs;
+      return rest;
+    });
+  }
+
+  const set = (key, value) => {
+    clearFieldError(key);
+    setFields((f) => ({ ...f, [key]: value }));
+  };
 
   function updateMed(index, field, value) {
+    clearFieldError(`med-${index}-${field}`);
+    clearFieldError("medicines");
     setMedications((meds) => meds.map((m, i) => (i === index ? { ...m, [field]: value } : m)));
   }
 
@@ -69,13 +84,21 @@ export default function PrescriptionForm({ patientId, patient }) {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    if (!fields.diagnosis.trim()) return setError("Enter the diagnosis.");
-    const meds = medications.filter((m) => Object.values(m).some((v) => v.trim()));
-    if (meds.length === 0) return setError("Add at least one medicine.");
-    if (meds.some((m) => !m.name.trim() || !m.dose.trim() || !m.frequency.trim() || !m.duration.trim())) {
-      return setError("Each medicine needs a name, dose, how often and for how long.");
-    }
-    if (!password) return setError("Enter your password to confirm the prescription.");
+    // Each problem is shown under its own field; the page scrolls to the first.
+    const errs = {};
+    if (!fields.diagnosis.trim()) errs.diagnosis = "Enter the diagnosis.";
+    const filled = medications.map((m) => Object.values(m).some((v) => v.trim()));
+    if (!filled.some(Boolean)) errs["med-0-name"] = "Add at least one medicine.";
+    medications.forEach((m, i) => {
+      if (!filled[i]) return;
+      for (const f of ["name", "dose", "frequency", "duration"]) {
+        if (!m[f].trim()) errs[`med-${i}-${f}`] = "Required";
+      }
+    });
+    if (!password) errs.password = "Enter your password to confirm the prescription.";
+    setFieldErrors(errs);
+    if (Object.keys(errs).length) return scrollToField(Object.keys(errs));
+    const meds = medications.filter((_, i) => filled[i]);
     setBusy(true);
     try {
       const result = await api.createPrescription({
@@ -95,7 +118,8 @@ export default function PrescriptionForm({ patientId, patient }) {
       setFields(EMPTY);
       await loadApproval();
     } catch (err) {
-      setError(err.message || "Couldn't save this prescription.");
+      setFieldErrors({ submit: err.message || "Couldn't save this prescription." });
+      scrollToField("submit");
     } finally {
       setBusy(false);
     }
@@ -134,7 +158,8 @@ export default function PrescriptionForm({ patientId, patient }) {
           </div>
           <div className="field">
             <label htmlFor="rx-diagnosis">Diagnosis</label>
-            <textarea id="rx-diagnosis" rows={2} maxLength={2000} value={fields.diagnosis} onChange={(e) => set("diagnosis", e.target.value)} />
+            <textarea id="rx-diagnosis" data-field="diagnosis" rows={2} maxLength={2000} value={fields.diagnosis} onChange={(e) => set("diagnosis", e.target.value)} />
+            <FieldError message={fieldErrors.diagnosis} />
           </div>
           <div className="field">
             <label htmlFor="rx-symptoms">Symptoms (optional)</label>
@@ -143,17 +168,26 @@ export default function PrescriptionForm({ patientId, patient }) {
 
           <label style={{ fontSize: 12.5, fontWeight: 600 }}>Medicines</label>
           {medications.map((med, index) => (
-            <div key={index} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, alignItems: "end", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+            <div key={index} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, alignItems: "start", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
               {MED_FIELDS.map((f) => (
                 <div className="field" style={{ marginBottom: 0 }} key={f.id}>
                   <label htmlFor={`med-${index}-${f.id}`} style={{ fontSize: 12 }}>
                     {f.label}
                   </label>
-                  <input id={`med-${index}-${f.id}`} value={med[f.id]} placeholder={f.placeholder} maxLength={f.id === "instructions" ? 500 : 200} onChange={(e) => updateMed(index, f.id, e.target.value)} />
+                  <input id={`med-${index}-${f.id}`} data-field={`med-${index}-${f.id}`} value={med[f.id]} placeholder={f.placeholder} maxLength={f.id === "instructions" ? 500 : 200} onChange={(e) => updateMed(index, f.id, e.target.value)} />
+                  <FieldError message={fieldErrors[`med-${index}-${f.id}`]} />
                 </div>
               ))}
               {medications.length > 1 && (
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMedications((meds) => meds.filter((_, i) => i !== index))}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ alignSelf: "end" }}
+                  onClick={() => {
+                    setFieldErrors({});
+                    setMedications((meds) => meds.filter((_, i) => i !== index));
+                  }}
+                >
                   Remove
                 </button>
               )}
@@ -174,9 +208,22 @@ export default function PrescriptionForm({ patientId, patient }) {
           </div>
           <div className="field">
             <label htmlFor="rx-password">Your password</label>
-            <input id="rx-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <input
+              id="rx-password"
+              data-field="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => {
+                clearFieldError("password");
+                setPassword(e.target.value);
+              }}
+            />
+            <FieldError message={fieldErrors.password} />
           </div>
-          {error && <div className="error-text">{error}</div>}
+          <div data-field="submit">
+            <FieldError message={fieldErrors.submit || error} />
+          </div>
           <button className="btn btn-primary" type="submit" disabled={busy}>
             {busy ? "Saving…" : "Save prescription"}
           </button>

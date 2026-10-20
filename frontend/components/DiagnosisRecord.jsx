@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { makeTextPdf, safeFilename, saveBlob } from "../lib/pdf";
+import { FieldError } from "./FieldError";
 
 // Shared pieces for diagnosis records: the form fields a doctor fills in,
 // and the read-only view a doctor or patient sees.
@@ -34,7 +35,7 @@ export function typeLabel(id) {
   return RECORD_TYPES.find((t) => t.id === id)?.label || id || "—";
 }
 
-export function DiagnosisFields({ value, onChange }) {
+export function DiagnosisFields({ value, onChange, errors = {} }) {
   return FORM_FIELDS.map((f) => (
     <div className="field" key={f.id}>
       <label htmlFor={`dx-${f.id}`}>
@@ -43,11 +44,13 @@ export function DiagnosisFields({ value, onChange }) {
       </label>
       <textarea
         id={`dx-${f.id}`}
+        data-field={`dx-${f.id}`}
         rows={f.rows}
         maxLength={4000}
         value={value[f.id] || ""}
         onChange={(e) => onChange({ ...value, [f.id]: e.target.value })}
       />
+      <FieldError message={errors[`dx-${f.id}`]} />
     </div>
   ));
 }

@@ -514,6 +514,10 @@ textarea.input, .field textarea { resize: vertical; line-height: 1.5; }
 }
 .eye-toggle:hover { background: var(--surface-2); color: var(--ink); }
 .error-text { font-size: 13px; color: var(--red); margin-top: 8px; }
+.field-error { margin-top: 6px; font-size: 12.5px; }
+.field:has(.field-error) input:not([type="checkbox"]):not([type="radio"]),
+.field:has(.field-error) select,
+.field:has(.field-error) textarea { border-color: var(--red); }
 .page-body > .error-text, .page-body > [role="alert"].error-text {
   padding: 10px 14px;
   border-radius: 10px;

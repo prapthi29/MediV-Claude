@@ -7,6 +7,7 @@ import Link from "next/link";
 import { api } from "../lib/api";
 import { REPORT_TYPES } from "./DiagnosisRecord";
 import { ACCEPT_ATTR, FILE_HINT, validateFile } from "../lib/fileRules";
+import { FieldError, scrollToField } from "./FieldError";
 
 export default function LabReportForm({ patientId, patient }) {
   const [approval, setApproval] = useState(undefined);
@@ -16,6 +17,7 @@ export default function LabReportForm({ patientId, patient }) {
   const [file, setFile] = useState(null);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(null);
 
@@ -54,18 +56,32 @@ export default function LabReportForm({ patientId, patient }) {
     }
   }
 
+  function clearFieldError(key) {
+    setFieldErrors((errs) => {
+      if (!errs[key] && !errs.submit) return errs;
+      const { [key]: _gone, submit: _submit, ...rest } = errs;
+      return rest;
+    });
+  }
+
   function chooseFile(e) {
     const chosen = e.target.files?.[0] || null;
     const problem = chosen && validateFile(chosen);
-    setError(problem || "");
+    clearFieldError("file");
+    if (problem) setFieldErrors((errs) => ({ ...errs, file: problem }));
     setFile(problem ? null : chosen);
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    if (!file) return setError("Choose the report file to upload.");
-    if (!password) return setError("Enter your password to confirm the report.");
+    // Each problem is shown under its own field; the page scrolls to the first.
+    const errs = {};
+    if (!title.trim()) errs.title = "Enter a title for the report.";
+    if (!file) errs.file = fieldErrors.file || "Choose the report file to upload.";
+    if (!password) errs.password = "Enter your password to confirm the report.";
+    setFieldErrors(errs);
+    if (Object.keys(errs).length) return scrollToField(Object.keys(errs));
     setBusy(true);
     try {
       const record = await api.saveRecord({
@@ -84,7 +100,8 @@ export default function LabReportForm({ patientId, patient }) {
       setTitle("");
       await loadApproval();
     } catch (err) {
-      setError(err.message || "Couldn't save the report.");
+      setFieldErrors({ submit: err.message || "Couldn't save the report." });
+      scrollToField("submit");
     } finally {
       setBusy(false);
     }
@@ -113,13 +130,24 @@ export default function LabReportForm({ patientId, patient }) {
       )}
 
       {approval?.status === "approved" && (
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <p style={{ fontSize: 13, color: "var(--primary)", fontWeight: 600, marginTop: 0 }}>
             Approved by the patient. You can save one report with this approval.
           </p>
           <div className="field">
             <label htmlFor="report-title">Title</label>
-            <input id="report-title" required maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Complete blood count, October 2026" />
+            <input
+              id="report-title"
+              data-field="title"
+              maxLength={200}
+              value={title}
+              onChange={(e) => {
+                clearFieldError("title");
+                setTitle(e.target.value);
+              }}
+              placeholder="e.g. Complete blood count, October 2026"
+            />
+            <FieldError message={fieldErrors.title} />
           </div>
           <div className="field">
             <label htmlFor="report-type">Report type</label>
@@ -133,8 +161,9 @@ export default function LabReportForm({ patientId, patient }) {
           </div>
           <div className="field">
             <label htmlFor="report-file">Report file</label>
-            <input id="report-file" type="file" accept={ACCEPT_ATTR} onChange={chooseFile} />
+            <input id="report-file" data-field="file" type="file" accept={ACCEPT_ATTR} onChange={chooseFile} />
             <div className="field-hint">{FILE_HINT}</div>
+            <FieldError message={fieldErrors.file} />
           </div>
           <div className="field">
             <label htmlFor="report-findings">Findings or notes (optional)</label>
@@ -142,9 +171,22 @@ export default function LabReportForm({ patientId, patient }) {
           </div>
           <div className="field">
             <label htmlFor="report-password">Your password</label>
-            <input id="report-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <input
+              id="report-password"
+              data-field="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => {
+                clearFieldError("password");
+                setPassword(e.target.value);
+              }}
+            />
+            <FieldError message={fieldErrors.password} />
           </div>
-          {error && <div className="error-text">{error}</div>}
+          <div data-field="submit">
+            <FieldError message={fieldErrors.submit || error} />
+          </div>
           <button className="btn btn-primary" type="submit" disabled={busy}>
             {busy ? "Saving…" : "Save lab report"}
           </button>

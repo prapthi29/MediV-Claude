@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import PortalShell from "../../../components/PortalShell";
 import TimeLeft from "../../../components/TimeLeft";
 import { api } from "../../../lib/api";
+import { FieldError, scrollToField } from "../../../components/FieldError";
 
 const DURATIONS = [15, 30, 45];
 const GENDER = { female: "Female", male: "Male", other: "Other", prefer_not_to_say: "Prefer not to say" };
@@ -52,6 +53,7 @@ export default function EmergencyAccess() {
   const [grants, setGrants] = useState([]);
   const [profiles, setProfiles] = useState({});
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -64,12 +66,24 @@ export default function EmergencyAccess() {
     return () => clearInterval(timer);
   }, [load]);
 
+  function clearFieldError(key) {
+    setFieldErrors((errs) => {
+      if (!errs[key] && !errs.submit) return errs;
+      const { [key]: _gone, submit: _submit, ...rest } = errs;
+      return rest;
+    });
+  }
+
   async function breakGlass(e) {
     e.preventDefault();
     setError("");
-    if (!healthId.trim()) return setError("Enter the patient's health ID.");
-    if (reason.trim().length < 10) return setError("Describe the emergency in at least 10 characters.");
-    if (!password) return setError("Enter your password to confirm the request.");
+    // Each problem is shown under its own field; the page scrolls to the first.
+    const errs = {};
+    if (!healthId.trim()) errs.healthId = "Enter the patient's health ID.";
+    if (reason.trim().length < 10) errs.reason = "Describe the emergency in at least 10 characters.";
+    if (!password) errs.password = "Enter your password to confirm the request.";
+    setFieldErrors(errs);
+    if (Object.keys(errs).length) return scrollToField(Object.keys(errs));
     setBusy(true);
     try {
       await api.grantEmergencyAccess({ patientId: healthId.trim(), reason: reason.trim(), durationMinutes: duration, password });
@@ -78,7 +92,7 @@ export default function EmergencyAccess() {
       setPassword("");
       load();
     } catch (err) {
-      setError(err.message || "Emergency access could not be opened.");
+      setFieldErrors({ submit: err.message || "Emergency access could not be opened." });
     } finally {
       setBusy(false);
     }
@@ -107,11 +121,35 @@ export default function EmergencyAccess() {
         <form className="card card-pad" onSubmit={breakGlass}>
           <div className="field">
             <label htmlFor="eg-health-id">Patient health ID</label>
-            <input id="eg-health-id" className="mono" value={healthId} onChange={(e) => setHealthId(e.target.value)} placeholder="MV-XXXXXXXX" autoComplete="off" />
+            <input
+              id="eg-health-id"
+              data-field="healthId"
+              className="mono"
+              value={healthId}
+              onChange={(e) => {
+                clearFieldError("healthId");
+                setHealthId(e.target.value);
+              }}
+              placeholder="MV-XXXXXXXX"
+              autoComplete="off"
+            />
+            <FieldError message={fieldErrors.healthId} />
           </div>
           <div className="field">
             <label htmlFor="eg-reason">Reason</label>
-            <textarea id="eg-reason" rows={3} maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Unconscious in the emergency room, need allergies and blood group" />
+            <textarea
+              id="eg-reason"
+              data-field="reason"
+              rows={3}
+              maxLength={1000}
+              value={reason}
+              onChange={(e) => {
+                clearFieldError("reason");
+                setReason(e.target.value);
+              }}
+              placeholder="e.g. Unconscious in the emergency room, need allergies and blood group"
+            />
+            <FieldError message={fieldErrors.reason} />
           </div>
           <div className="field">
             <label>How long</label>
@@ -126,9 +164,20 @@ export default function EmergencyAccess() {
           </div>
           <div className="field">
             <label htmlFor="eg-password">Your password</label>
-            <input id="eg-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <input
+              id="eg-password"
+              data-field="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => {
+                clearFieldError("password");
+                setPassword(e.target.value);
+              }}
+            />
+            <FieldError message={fieldErrors.password} />
           </div>
-          {error && <div className="error-text">{error}</div>}
+          <FieldError message={fieldErrors.submit} />
           <button className="btn btn-danger" type="submit" disabled={busy}>
             {busy ? "Opening…" : "Open emergency access"}
           </button>

@@ -93,6 +93,8 @@ export class ConsentService {
       patientName: consent.patient_name,
       patientEmail: consent.patient_email,
       patientHealthId: consent.patient_health_id ?? null,
+      // Once a basic profile exists, doctors can only view or edit it.
+      hasBasicProfile: consent.patient_profile_status === 'active',
       expiresAt: consent.expires_at,
       createdAt: consent.created_at,
     }));

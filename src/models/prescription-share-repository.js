@@ -1,7 +1,7 @@
 const SHARE_SELECT = `
   SELECT s.*,
          ph.name AS pharmacy_name, ph.license_id AS pharmacy_license_id,
-         pt.name AS patient_name,
+         pt.name AS patient_name, pt.patient_id AS patient_health_id,
          p.title AS prescription_title, p.created_at AS issued_at,
          p.dispensed_at, p.dispensed_by_user_id,
          d.name AS doctor_name

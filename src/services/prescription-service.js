@@ -269,7 +269,7 @@ export class PrescriptionService {
 
   async listSharedWithPharmacy(pharmacyUserId) {
     const shares = await this.prescriptionShareRepository.listActiveForPharmacy(pharmacyUserId);
-    return shares.map((share) => this.publicShare(share));
+    return shares.map((share) => this.pharmacyShare(share));
   }
 
   async requireShare(pharmacyUserId, shareId) {
@@ -281,12 +281,11 @@ export class PrescriptionService {
     return { share, prescription };
   }
 
-  // The pharmacy sees the patient's name and the medicines only, plus the
-  // hashes and signature it needs to check the doctor's signature itself.
+  // The pharmacy sees the patient's name, patient ID and the medicines only,
+  // plus the proof its browser needs to check the doctor's signature.
   async openForPharmacy(pharmacyUserId, shareId) {
     const { share, prescription } = await this.requireShare(pharmacyUserId, shareId);
     const { document, integrity } = await this.open(prescription);
-    const doctor = await this.userRepository.findById(prescription.doctor_user_id);
     const medications = document?.medications ?? [];
 
     await this.auditService?.record({
@@ -296,11 +295,9 @@ export class PrescriptionService {
     });
 
     return {
-      share: this.publicShare(share),
+      share: this.pharmacyShare(share),
       patientName: share.patient_name,
-      doctorName: doctor?.name ?? null,
-      doctorLicenseId: doctor?.license_id ?? null,
-      issuedAt: prescription.created_at,
+      patientId: share.patient_health_id ?? null,
       medications,
       proof: {
         type: 'medivault-prescription/1',
@@ -346,6 +343,12 @@ export class PrescriptionService {
     const medicationSummary = (document?.medications ?? []).map((m) => m.name).join(', ');
     await this.auditService?.record({ eventType: 'prescription_dispensed', actorUserId: pharmacyUserId, subjectUserId: prescription.patient_user_id, resourceType: 'prescription', resourceId: prescription.id, metadata: { dispenseSha256: digest, signerAddress, medication_summary: medicationSummary } });
     return { prescriptionId: prescription.id, dispensedAt: updated.dispensed_at };
+  }
+
+  // What a pharmacy may see about a share: no doctor, diagnosis or dates of issue.
+  pharmacyShare(share) {
+    const { id, patientName, status, expiresAt, createdAt } = this.publicShare(share);
+    return { id, patientName, patientId: share.patient_health_id ?? null, status, expiresAt, createdAt };
   }
 
   publicShare(share) {

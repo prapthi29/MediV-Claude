@@ -586,6 +586,11 @@ export default function DoctorEmergencyProfiles() {
       setPassword("");
       setActiveApproval(null);
       setNotice("Basic profile saved.");
+      setPatients((list) =>
+        (list || []).map((p) =>
+          (p.patientUserId || p.id) === patientId ? { ...p, hasBasicProfile: true } : p
+        )
+      );
 
       try {
         // A separate approved view permission is needed for protected audit access.
@@ -605,6 +610,11 @@ export default function DoctorEmergencyProfiles() {
   const selectedPatient = patients?.find(
     (patient) => (patient.patientUserId || patient.id) === patientId
   );
+
+  // Before a basic profile exists it can only be created; afterwards only
+  // viewed or edited.
+  const hasProfile = Boolean(selectedPatient?.hasBasicProfile || profile);
+  const allowedOperations = hasProfile ? ["view", "update"] : ["create"];
 
   const pendingRequests = permissionRequests.filter(
     (item) => requestStatusOf(item) === "pending"
@@ -684,12 +694,13 @@ export default function DoctorEmergencyProfiles() {
 
             <h3>Request permission</h3>
             <p>
-              Each operation requires separate patient approval. Your existing
-              patient-doctor connection must also be active.
+              {hasProfile
+                ? "This patient already has a basic profile. Ask to view or edit it; each needs the patient's approval."
+                : "This patient has no basic profile yet. Ask the patient's approval to create one."}
             </p>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {["view", "create", "update"].map((operation) => (
+              {allowedOperations.map((operation) => (
                 <button
                   key={operation}
                   type="button"

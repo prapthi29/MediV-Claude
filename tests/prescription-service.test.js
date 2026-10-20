@@ -58,7 +58,7 @@ class Shares {
   constructor(prescriptions) { this.items = []; this.prescriptions = prescriptions; }
   decorate(share) {
     const p = this.prescriptions.items.find((x) => x.id === share.prescription_id);
-    return share && { ...share, patient_name: 'Ravi Patient', dispensed_at: p?.dispensed_at ?? null };
+    return share && { ...share, patient_name: 'Ravi Patient', patient_health_id: 'MV-1234ABCD', dispensed_at: p?.dispensed_at ?? null };
   }
   async create(input) {
     const share = { id: crypto.randomUUID(), prescription_id: input.prescriptionId, patient_user_id: input.patientUserId, pharmacy_user_id: input.pharmacyUserId, expires_at: input.expiresAt, revoked_at: null, created_at: new Date() };
@@ -218,6 +218,9 @@ describe('prescription service', () => {
     const opened = await service.openForPharmacy('pharmacy', share.id);
 
     expect(opened.patientName).toBe('Ravi Patient');
+    expect(opened.patientId).toBe('MV-1234ABCD');
+    expect(opened).not.toHaveProperty('doctorName');
+    expect(opened.share).not.toHaveProperty('doctorName');
     expect(opened.medications[0].name).toBe('Amoxicillin');
     expect(JSON.stringify(opened)).not.toContain(form.diagnosis);
     expect(JSON.stringify(opened)).not.toContain(form.notes);

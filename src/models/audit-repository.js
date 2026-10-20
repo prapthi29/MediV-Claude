@@ -75,16 +75,17 @@ export class AuditRepository {
     return result.rows;
   }
 
-  // Dispensing history only: the prescription and its medicines, never the
-  // patient's or the doctor's name.
+  // Dispensing history only: the patient's MV- ID and the medicines, never
+  // the patient's or the doctor's name.
   async listForPharmacy(pharmacyUserId) {
     const result = await this.database.query(
-      `SELECT id, resource_id AS prescription_id,
-              COALESCE(NULLIF(metadata->>'medication_summary', ''), 'Prescription dispensed') AS medication_summary,
-              created_at AS at
-       FROM audit_events
-       WHERE actor_user_id = $1 AND event_type = 'prescription_dispensed'
-       ORDER BY created_at DESC LIMIT 200`,
+      `SELECT a.id, u.patient_id,
+              COALESCE(NULLIF(a.metadata->>'medication_summary', ''), 'Prescription dispensed') AS medication_summary,
+              a.created_at AS at
+       FROM audit_events a
+       LEFT JOIN users u ON u.id = a.subject_user_id
+       WHERE a.actor_user_id = $1 AND a.event_type = 'prescription_dispensed'
+       ORDER BY a.created_at DESC LIMIT 200`,
       [pharmacyUserId]
     );
     return result.rows;

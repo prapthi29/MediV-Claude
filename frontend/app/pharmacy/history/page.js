@@ -20,7 +20,7 @@ export default function PharmacyHistory() {
       role="pharmacy"
       eyebrow="Pharmacy Portal"
       title="Dispensing history"
-      subtitle="Prescriptions you've dispensed. Patient and doctor details are not kept here, and the prescription itself is no longer available once dispensed."
+      subtitle="Prescriptions you have dispensed. Once dispensed, you no longer have access to the prescription itself."
     >
       <div className="card">
         {history && history.length === 0 && (
@@ -30,7 +30,7 @@ export default function PharmacyHistory() {
           <table>
             <thead>
               <tr>
-                <th>Prescription ID</th>
+                <th>Patient ID</th>
                 <th>Medicines</th>
                 <th>Dispensed</th>
               </tr>
@@ -38,7 +38,7 @@ export default function PharmacyHistory() {
             <tbody>
               {history.map((h) => (
                 <tr key={h.id}>
-                  <td className="mono" style={{ fontWeight: 600 }}>{h.prescription_id}</td>
+                  <td className="mono" style={{ fontWeight: 600 }}>{h.patient_id || "—"}</td>
                   <td>{h.medication_summary}</td>
                   <td style={{ color: "var(--muted)" }}>{fmtDateTime(h.at)}</td>
                 </tr>

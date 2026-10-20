@@ -71,7 +71,7 @@ export default function SharedPrescriptions() {
       role="pharmacy"
       eyebrow="Pharmacy Portal"
       title="Shared prescriptions"
-      subtitle="Patients share a prescription with your pharmacy ID for 30 minutes. You see the patient's name and the medicines only, and access ends as soon as you dispense."
+      subtitle="Patients share a prescription with your pharmacy ID for 30 minutes. You see the patient's name, patient ID and the medicines only, and access ends as soon as you dispense."
     >
       {pharmacyId && (
         <div className="card card-pad" style={{ marginBottom: 20 }}>
@@ -89,8 +89,7 @@ export default function SharedPrescriptions() {
             <thead>
               <tr>
                 <th>Patient</th>
-                <th>Prescribed by</th>
-                <th>Issued</th>
+                <th>Patient ID</th>
                 <th>Time left</th>
                 <th>Status</th>
                 <th></th>
@@ -100,8 +99,7 @@ export default function SharedPrescriptions() {
               {shares.map((s) => (
                 <tr key={s.id}>
                   <td style={{ fontWeight: 600 }}>{s.patientName}</td>
-                  <td>{s.doctorName || "—"}</td>
-                  <td style={{ color: "var(--muted)" }}>{fmtDateTime(s.issuedAt)}</td>
+                  <td className="mono">{s.patientId || "—"}</td>
                   <td>
                     <TimeLeft until={s.expiresAt} onExpire={load} />
                   </td>
@@ -138,10 +136,11 @@ export default function SharedPrescriptions() {
             <div>
               <div style={{ fontSize: 11.5, color: "var(--muted)" }}>Patient</div>
               <div style={{ fontWeight: 700, fontSize: 16 }}>{open.patientName}</div>
-              <div style={{ fontSize: 12.5, color: "var(--muted)" }}>
-                Prescribed by {open.doctorName}
-                {open.doctorLicenseId ? ` (license ${open.doctorLicenseId})` : ""} on {fmtDateTime(open.issuedAt)}
-              </div>
+              {open.patientId && (
+                <div className="mono" style={{ fontSize: 12.5, color: "var(--muted)" }}>
+                  Patient ID {open.patientId}
+                </div>
+              )}
             </div>
             <StatusBadge status={open.dispensed ? "dispensed" : verified ? "valid" : "invalid"} />
           </div>

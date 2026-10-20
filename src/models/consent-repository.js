@@ -25,7 +25,8 @@ export class ConsentRepository {
       `SELECT consent.patient_user_id, consent.expires_at,
               consent.created_at, consent.updated_at,
               users.name AS patient_name, users.email AS patient_email,
-              users.patient_id AS patient_health_id
+              users.patient_id AS patient_health_id,
+              users.medical_record_status AS patient_profile_status
        FROM patient_doctor_consents consent
        JOIN users ON users.id = consent.patient_user_id
        WHERE consent.doctor_user_id = $1

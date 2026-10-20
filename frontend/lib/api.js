@@ -119,7 +119,7 @@ async function request(path, { method = "GET", body } = {}) {
   return data;
 }
 
-async function downloadFile(path, filename) {
+async function fetchFile(path) {
   const res = await fetch(`${BASE_URL}${path}`, {
     headers: authHeaders(),
   });
@@ -138,7 +138,11 @@ async function downloadFile(path, filename) {
     throw err;
   }
 
-  const blob = await res.blob();
+  return res.blob();
+}
+
+async function downloadFile(path, filename) {
+  const blob = await fetchFile(path);
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
 
@@ -210,6 +214,10 @@ export const api = {
       method: "PATCH",
       body: { isEmergencyEssential },
     }).then((r) => r.record),
+
+  // The patient's own record attachment as a Blob, for viewing in the page.
+  fetchOwnRecordFile: (recordId) =>
+    fetchFile(`/patients/me/records/${recordId}/download`),
 
   downloadOwnRecord: (recordId, filename) =>
     downloadFile(

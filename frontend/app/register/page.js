@@ -197,7 +197,7 @@ export default function RegisterPage() {
               marginTop: 10,
             }}
           >
-            For patients, providers, and pharmacies alike.
+            For patients, doctors, and pharmacies alike.
           </p>
         </div>
       </div>

@@ -61,8 +61,10 @@ export default function SharedPrescriptions() {
     try {
       await api.dispensePrescription(open.share.id, password);
       setPassword("");
-      await openShare(open.share.id);
-      setNotice("Marked as dispensed and signed with your pharmacy key.");
+      // Dispensing ends this pharmacy's access to the prescription.
+      setOpen(null);
+      setBrowserCheck(null);
+      setNotice("Dispensed and signed with your pharmacy key. Your access to this prescription has ended; it's listed in your dispensing history.");
       load();
     } catch (err) {
       setError(err.message || "Couldn't mark this prescription as dispensed.");
@@ -78,7 +80,7 @@ export default function SharedPrescriptions() {
       role="pharmacy"
       eyebrow="Pharmacy Portal"
       title="Shared prescriptions"
-      subtitle="Patients share a prescription with your pharmacy ID for 30 minutes. You see the patient's name and the medicines only."
+      subtitle="Patients share a prescription with your pharmacy ID for 30 minutes. You see the patient's name and the medicines only, and access ends as soon as you dispense."
     >
       {pharmacyId && (
         <div className="card card-pad" style={{ marginBottom: 20 }}>
@@ -130,6 +132,12 @@ export default function SharedPrescriptions() {
       {error && (
         <div className="error-text" role="alert" style={{ marginBottom: 16 }}>
           {error}
+        </div>
+      )}
+
+      {notice && !open && (
+        <div className="card card-pad" role="status" style={{ color: "var(--primary-dark)", fontWeight: 600 }}>
+          {notice}
         </div>
       )}
 

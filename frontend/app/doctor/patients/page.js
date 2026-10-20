@@ -4,7 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import PortalShell from "../../../components/PortalShell";
 import TimeLeft from "../../../components/TimeLeft";
-import { RecordView, saveBase64, typeLabel } from "../../../components/DiagnosisRecord";
+import { RecordView, base64ToBlob, typeLabel } from "../../../components/DiagnosisRecord";
 import { EmptyState, fmtDate, fmtDateTime } from "../../../components/ui";
 import { api } from "../../../lib/api";
 
@@ -123,7 +123,10 @@ export default function DoctorPatients() {
 
       {viewing && (
         <div className="card card-pad" style={{ marginBottom: 16 }}>
-          <RecordView view={viewing} onDownload={viewing.attachment ? () => saveBase64(viewing.attachment) : null} />
+          <RecordView
+            view={viewing}
+            loadFile={viewing.attachment?.base64 ? async () => base64ToBlob(viewing.attachment.base64, viewing.attachment.contentType) : null}
+          />
           <p style={{ color: "var(--muted)", fontSize: 12.5, marginBottom: 0 }}>
             This approval is now used. Closing this panel means you need a new approval to see it again.{" "}
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setViewing(null)}>

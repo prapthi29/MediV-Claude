@@ -2,7 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import PortalShell from "../../../components/PortalShell";
 import { api } from "../../../lib/api";
 
 const GENDER_LABEL = { female: "Female", male: "Male", other: "Other", prefer_not_to_say: "Prefer not to say" };
@@ -53,11 +53,11 @@ function doctorNameOf(item) {
 function operationLabel(operation) {
   switch (String(operation || "view").toLowerCase()) {
     case "create":
-      return "Create your emergency profile";
+      return "Create your basic profile";
     case "update":
-      return "Edit your emergency profile";
+      return "Edit your basic profile";
     default:
-      return "View your emergency profile";
+      return "View your basic profile";
   }
 }
 
@@ -81,7 +81,7 @@ export default function PatientEmergencyProfilePage() {
       setAccessRequests(Array.isArray(requests) ? requests : []);
     } catch (err) {
       setRequestError(
-        err?.message || "Unable to load emergency-profile access requests."
+        err?.message || "Unable to load basic profile access requests."
       );
     } finally {
       setRequestsLoading(false);
@@ -99,7 +99,7 @@ export default function PatientEmergencyProfilePage() {
         if (!cancelled) {
           setError(
             err?.message ||
-              "Unable to load your emergency medical profile."
+              "Unable to load your basic profile."
           );
         }
       } finally {
@@ -165,8 +165,8 @@ export default function PatientEmergencyProfilePage() {
         </div>
 
         <p>
-          Review requests to view, create, or edit your emergency medical
-          profile. Approve only requests you recognize and agree to.
+          Review requests to view, create, or edit your basic profile.
+          Approve only requests you recognize and agree to.
         </p>
 
         {requestMessage && (
@@ -256,32 +256,26 @@ export default function PatientEmergencyProfilePage() {
     );
   }
 
+  const shellProps = {
+    role: "patient",
+    eyebrow: "Patient Portal",
+    title: "Basic profile",
+    subtitle:
+      "Your essential medical information: blood group, allergies, conditions, medicines and an emergency contact. Doctors need your permission to view or change it.",
+  };
+
   if (loading) {
     return (
-      <main className="emergency-page">
-        <p>Loading your emergency medical profile...</p>
-      </main>
+      <PortalShell {...shellProps}>
+        <p className="emergency-muted">Loading your basic profile...</p>
+      </PortalShell>
     );
   }
 
   const contact = profile?.emergencyContact || {};
 
   return (
-    <main className="emergency-page">
-      <Link className="emergency-back-link" href="/patient/dashboard">
-        ← Back to dashboard
-      </Link>
-
-      <header className="emergency-page-header">
-        <p className="emergency-eyebrow">MEDIVAULT · PATIENT PORTAL</p>
-        <h1>Emergency medical profile</h1>
-        <p>
-          Your essential medical information for emergency situations.
-          Doctors must obtain the required permission before accessing or
-          managing this profile.
-        </p>
-      </header>
-
+    <PortalShell {...shellProps}>
       {error && (
         <div className="emergency-alert" role="alert">
           {error}
@@ -295,7 +289,7 @@ export default function PatientEmergencyProfilePage() {
           <h2>Your profile is not available yet</h2>
           <p>
             An active doctor with the required patient consent can request
-            permission to create your initial emergency medical profile.
+            permission to create your basic profile.
             You can review that request above.
           </p>
         </div>
@@ -452,6 +446,6 @@ export default function PatientEmergencyProfilePage() {
           </footer>
         </>
       )}
-    </main>
+    </PortalShell>
   );
 }

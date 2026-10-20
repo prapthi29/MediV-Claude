@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 
 const PORTAL_LABELS = {
@@ -26,10 +27,24 @@ export default function PortalShell({
   children,
 }) {
   const [user, setUser] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     setUser(getStoredUser());
   }, []);
+
+  // Close the mobile menu on navigation and on Escape.
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onKey = (e) => e.key === "Escape" && setMenuOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
 
   const portalLabel = PORTAL_LABELS[role] || "MediVault Portal";
   const userLabel =
@@ -42,103 +57,48 @@ export default function PortalShell({
 
   return (
     <div className="shell">
-      <Sidebar role={role} userLabel={userLabel} />
+      <Sidebar
+        role={role}
+        userLabel={userLabel}
+        userEmail={userEmail}
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+      />
+
+      {menuOpen && (
+        <div
+          className="sidebar-backdrop"
+          aria-hidden="true"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
 
       <main className="main">
-        <div
-          className="topbar"
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 16,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ minWidth: 0, flex: "1 1 260px" }}>
-            <p
-              className="eyebrow"
-              style={{ marginBottom: 6 }}
-            >
-              {eyebrow || portalLabel}
-            </p>
-
-            <h1 className="page-title">{title}</h1>
-
-            {subtitle && (
-              <p className="page-sub">{subtitle}</p>
-            )}
-          </div>
-
-          <div
-            aria-label="Signed-in account"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 11,
-              padding: "10px 14px",
-              border: "1px solid var(--border, #e5e7eb)",
-              borderRadius: 12,
-              maxWidth: "100%",
-              minWidth: 0,
-            }}
+        <div className="mobile-bar">
+          <button
+            type="button"
+            className="hamburger"
+            aria-label="Open menu"
+            aria-controls="portal-sidebar"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(true)}
           >
-            <div
-              aria-hidden="true"
-              style={{
-                width: 38,
-                height: 38,
-                flexShrink: 0,
-                borderRadius: "50%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: "var(--primary, #315c50)",
-                color: "#fff",
-                fontWeight: 700,
-                fontSize: 15,
-              }}
-            >
-              {String(userLabel).charAt(0).toUpperCase()}
-            </div>
-
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "var(--muted)",
-                  marginBottom: 3,
-                }}
-              >
-                {portalLabel}
-              </div>
-
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {userLabel}
-              </div>
-
-              {userEmail && userEmail !== userLabel && (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "var(--muted)",
-                    overflowWrap: "anywhere",
-                  }}
-                >
-                  {userEmail}
-                </div>
-              )}
-            </div>
-          </div>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <span className="mobile-bar-title">MediVault · {portalLabel}</span>
         </div>
 
-        {children}
+        <div className="main-inner">
+          <header className="topbar">
+            <p className="eyebrow">{eyebrow || portalLabel}</p>
+            <h1 className="page-title">{title}</h1>
+            {subtitle && <p className="page-sub">{subtitle}</p>}
+          </header>
+
+          <div className="page-body">{children}</div>
+        </div>
       </main>
     </div>
   );

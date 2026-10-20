@@ -82,7 +82,7 @@ export default function LoginPage() {
             Your health record, all in one place.
           </h1>
           <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 14, maxWidth: 360, marginTop: 10 }}>
-            One account for patients, providers, and pharmacies.
+            One platform for patients, doctors, and pharmacies.
           </p>
         </div>
       </div>
@@ -123,9 +123,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 18, textAlign: "center" }}>
-            No backend connected? This screen will still log you into a demo account.
-          </p>
         </div>
       </div>
     </div>

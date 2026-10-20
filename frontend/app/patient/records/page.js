@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import PortalShell from "../../../components/PortalShell";
-import { RecordView, typeLabel } from "../../../components/DiagnosisRecord";
+import { RecordView, saveRecordPdf, typeLabel } from "../../../components/DiagnosisRecord";
 import { EmptyState, fmtDate, fmtDateTime } from "../../../components/ui";
 import { api } from "../../../lib/api";
 
@@ -94,6 +94,19 @@ export default function PatientRecords() {
     }
   }
 
+  // Typed records download as a PDF; uploaded files download as they are.
+  async function download(recordId) {
+    setError("");
+    try {
+      const view = open?.record.id === recordId ? open : await api.viewOwnRecord(recordId);
+      if (view.form) saveRecordPdf(view);
+      else if (view.attachment) await api.downloadOwnRecord(recordId, view.attachment.filename);
+      else setError("This record is empty.");
+    } catch (e) {
+      setError(e.message || "Could not download the record.");
+    }
+  }
+
   async function verify(recordId) {
     try {
       const v = await api.verifyRecord(recordId);
@@ -177,7 +190,7 @@ export default function PatientRecords() {
         <div className="card card-pad" style={{ marginBottom: 20 }}>
           <RecordView
             view={open}
-            onDownload={() => api.downloadOwnRecord(open.record.id, open.attachment.filename).catch((e) => setError(e.message))}
+            loadFile={() => api.fetchOwnRecordFile(open.record.id)}
           />
         </div>
       )}
@@ -211,6 +224,9 @@ export default function PatientRecords() {
                     {verification[r.id] && <span style={{ fontSize: 12, marginRight: 8 }}>{verification[r.id]}</span>}
                     <button className="btn btn-ghost btn-sm" onClick={() => verify(r.id)}>
                       Verify
+                    </button>{" "}
+                    <button className="btn btn-ghost btn-sm" onClick={() => download(r.id)}>
+                      Download
                     </button>{" "}
                     <button className="btn btn-primary btn-sm" onClick={() => toggle(r.id)}>
                       {open?.record.id === r.id ? "Close" : "Open"}

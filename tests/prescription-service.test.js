@@ -67,6 +67,7 @@ class Shares {
   live(s) { return !s.revoked_at && s.expires_at > new Date(); }
   async findActiveForPair(prescriptionId, pharmacyId) { const s = this.items.find((x) => x.prescription_id === prescriptionId && x.pharmacy_user_id === pharmacyId && this.live(x)); return s ? this.decorate(s) : null; }
   async findActiveForPharmacy(id, pharmacyId) { const s = this.items.find((x) => x.id === id && x.pharmacy_user_id === pharmacyId && this.live(x)); return s ? this.decorate(s) : null; }
+  async revokeAllForPrescription(prescriptionId) { for (const s of this.items) if (s.prescription_id === prescriptionId && !s.revoked_at) s.revoked_at = new Date(); }
   async revokeForPatient(id, patientId) { const s = this.items.find((x) => x.id === id && x.patient_user_id === patientId && this.live(x)); if (!s) return null; s.revoked_at = new Date(); return this.decorate(s); }
 }
 
@@ -240,7 +241,9 @@ describe('prescription service', () => {
 
     await expect(service.dispense('pharmacy', share.id, 'Wrong#Pass1234')).rejects.toMatchObject({ code: 'INVALID_SIGNING_PASSWORD' });
     await expect(service.dispense('pharmacy', share.id, PASSWORD)).resolves.toMatchObject({ prescriptionId: prescription.id });
-    await expect(service.dispense('pharmacy', share.id, PASSWORD)).rejects.toMatchObject({ code: 'PRESCRIPTION_ALREADY_DISPENSED' });
+    // Dispensing ends the pharmacy's access to the prescription.
+    await expect(service.openForPharmacy('pharmacy', share.id)).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
+    await expect(service.dispense('pharmacy', share.id, PASSWORD)).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
     await expect(service.shareWithPharmacy('patient', prescription.id, 'PH-002')).rejects.toMatchObject({ code: 'PRESCRIPTION_ALREADY_DISPENSED' });
   });
 

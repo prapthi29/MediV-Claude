@@ -84,9 +84,9 @@ const requestStatusOf = (item) =>
   String(item?.status || "").toLowerCase();
 
 const operationLabel = (operation) => {
-  if (operation === "create") return "Create profile";
-  if (operation === "update") return "Edit profile";
-  return "View profile";
+  if (operation === "create") return "Create basic profile";
+  if (operation === "update") return "Edit basic profile";
+  return "View basic profile";
 };
 
 function toForm(profile) {
@@ -156,7 +156,7 @@ function ListEditor({
   }
 
   return (
-    <section className="card" style={{ marginBottom: 16 }}>
+    <section className="card card-pad" style={{ marginBottom: 16 }}>
       <h3 style={{ marginTop: 0 }}>{title}</h3>
 
       <label style={{ display: "block", marginBottom: 8 }}>
@@ -324,7 +324,7 @@ export default function DoctorEmergencyProfiles() {
       setPermissionRequests(Array.isArray(requests) ? requests : []);
     } catch (err) {
       setError(
-        err.message || "Unable to load emergency-profile permission requests."
+        err.message || "Unable to load basic profile permission requests."
       );
     } finally {
       setLoadingRequests(false);
@@ -417,7 +417,7 @@ export default function DoctorEmergencyProfiles() {
         setProfile(result);
         setForm(toForm(result));
         setCreating(false);
-        setNotice("Emergency profile loaded using approved view permission.");
+        setNotice("Basic profile loaded using approved view permission.");
 
         try {
           const history = await api.getPatientEmergencyProfileAudit(
@@ -437,7 +437,7 @@ export default function DoctorEmergencyProfiles() {
           setForm(EMPTY);
           setCreating(true);
           setNotice(
-            "Complete the initial profile. The approved create permission will be used when you save."
+            "Fill in the basic profile. The approved create permission will be used when you save."
           );
           setActiveApproval({
             id: approvalRequestId,
@@ -608,7 +608,7 @@ export default function DoctorEmergencyProfiles() {
 
       await loadRequests(patientId);
     } catch (err) {
-      setError(err.message || "Unable to save the emergency profile.");
+      setError(err.message || "Unable to save the basic profile.");
     } finally {
       setSaving(false);
     }
@@ -630,12 +630,12 @@ export default function DoctorEmergencyProfiles() {
     <PortalShell
       role="doctor"
       eyebrow="Doctor Portal"
-      title="Emergency profiles"
-      subtitle="Request patient permission before viewing, creating, or updating an emergency medical profile."
+      title="Basic profiles"
+      subtitle="Request patient permission before viewing, creating, or updating a patient's basic profile."
     >
       {error && (
         <div
-          className="card"
+          className="card card-pad"
           role="alert"
           style={{ marginBottom: 16, color: "var(--danger, #dc2626)" }}
         >
@@ -644,12 +644,12 @@ export default function DoctorEmergencyProfiles() {
       )}
 
       {notice && (
-        <div className="card" role="status" style={{ marginBottom: 16 }}>
+        <div className="card card-pad" role="status" style={{ marginBottom: 16 }}>
           {notice}
         </div>
       )}
 
-      <section className="card" style={{ marginBottom: 20 }}>
+      <section className="card card-pad" style={{ marginBottom: 20 }}>
         <label
           htmlFor="emergency-patient"
           style={{ display: "block", fontWeight: 600, marginBottom: 8 }}
@@ -711,7 +711,7 @@ export default function DoctorEmergencyProfiles() {
                 >
                   {requesting === operation
                     ? "Requesting..."
-                    : `Request ${operationLabel(operation).toLowerCase()}`}
+                    : `Ask to ${operationLabel(operation).toLowerCase()}`}
                 </button>
               ))}
             </div>
@@ -720,7 +720,7 @@ export default function DoctorEmergencyProfiles() {
       </section>
 
       {patientId && (
-        <section className="card" style={{ marginBottom: 20 }}>
+        <section className="card card-pad" style={{ marginBottom: 20 }}>
           <div
             style={{
               display: "flex",
@@ -802,12 +802,12 @@ export default function DoctorEmergencyProfiles() {
       )}
 
       {loadingProfile && (
-        <div className="card">Using approved permission...</div>
+        <div className="card card-pad">Using approved permission...</div>
       )}
 
       {patientId && !loadingProfile && (profile || creating) && (
         <>
-          <section className="card" style={{ marginBottom: 16 }}>
+          <section className="card card-pad" style={{ marginBottom: 16 }}>
             <h3 style={{ marginTop: 0 }}>
               Basic and emergency contact details
             </h3>
@@ -950,9 +950,9 @@ export default function DoctorEmergencyProfiles() {
             ]}
           />
 
-          <section className="card" style={{ marginBottom: 20 }}>
+          <section className="card card-pad" style={{ marginBottom: 20 }}>
             <h3 style={{ marginTop: 0 }}>
-              {creating ? "Create initial profile" : "Save changes"}
+              {creating ? "Create basic profile" : "Save changes"}
             </h3>
 
             {!activeApproval && (
@@ -964,7 +964,7 @@ export default function DoctorEmergencyProfiles() {
 
             <label style={{ display: "block", marginBottom: 12 }}>
               Reason for{" "}
-              {creating ? "creating this profile" : "this update"} (required)
+              {creating ? "creating this basic profile" : "this update"} (required)
               <textarea
                 className="input"
                 value={reason}
@@ -1004,7 +1004,7 @@ export default function DoctorEmergencyProfiles() {
               {saving
                 ? "Signing..."
                 : creating
-                  ? "Sign and create profile"
+                  ? "Sign and create basic profile"
                   : "Sign and save changes"}
             </button>
 
@@ -1025,7 +1025,7 @@ export default function DoctorEmergencyProfiles() {
       )}
 
       {profile && (
-        <section className="card">
+        <section className="card card-pad">
           <h3 style={{ marginTop: 0 }}>Audit history</h3>
           <p style={{ color: "var(--muted)" }}>
             Audit details are available only when authorized by the backend.

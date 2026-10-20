@@ -298,7 +298,7 @@ export class PrescriptionService {
     if (prescription.dispensed_at) {
       throw new AppError(409, 'This prescription has already been dispensed.', 'PRESCRIPTION_ALREADY_DISPENSED');
     }
-    const { integrity } = await this.open(prescription);
+    const { document, integrity } = await this.open(prescription);
     if (!integrity.valid) {
       throw new AppError(409, 'This prescription failed verification and cannot be dispensed.', 'PRESCRIPTION_NOT_VERIFIED');
     }
@@ -317,7 +317,10 @@ export class PrescriptionService {
     if (!updated) {
       throw new AppError(409, 'This prescription has already been dispensed.', 'PRESCRIPTION_ALREADY_DISPENSED');
     }
-    await this.auditService?.record({ eventType: 'prescription_dispensed', actorUserId: pharmacyUserId, subjectUserId: prescription.patient_user_id, resourceType: 'prescription', resourceId: prescription.id, metadata: { dispenseSha256: digest, signerAddress } });
+    // Dispensing ends every pharmacy's access to this prescription.
+    await this.prescriptionShareRepository.revokeAllForPrescription(prescription.id);
+    const medicationSummary = (document?.medications ?? []).map((m) => m.name).join(', ');
+    await this.auditService?.record({ eventType: 'prescription_dispensed', actorUserId: pharmacyUserId, subjectUserId: prescription.patient_user_id, resourceType: 'prescription', resourceId: prescription.id, metadata: { dispenseSha256: digest, signerAddress, medication_summary: medicationSummary } });
     return { prescriptionId: prescription.id, dispensedAt: updated.dispensed_at };
   }
 

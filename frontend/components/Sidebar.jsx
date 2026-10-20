@@ -1,8 +1,7 @@
-﻿
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 const ICONS = {
   overview: "M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6V11h-6v9Zm0-16v5h6V4h-6Z",
@@ -18,6 +17,8 @@ const ICONS = {
   writeRx: "M9 3h6v4H9V3Zm-3 4h12v14H6V7Zm3 5h6M9 15h6",
   verify: "M9 12l2 2 4-4m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
   history: "M12 8v4l3 2M3 12a9 9 0 1 0 3.5-7.1M3 4v5h5",
+  signOut: "M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4",
+  close: "M6 6l12 12M18 6L6 18",
 };
 
 function Icon({ d }) {
@@ -44,8 +45,17 @@ const PORTAL_LABEL = {
   pharmacy: "Pharmacy",
 };
 
-export default function Sidebar({ role, userLabel }) {
+export default function Sidebar({ role, userLabel, userEmail, open = false, onClose }) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  function signOut() {
+    try {
+      window.localStorage.removeItem("sch_token");
+      window.localStorage.removeItem("sch_user");
+    } catch {}
+    router.push("/login");
+  }
 
   const LINKS_BY_ROLE = {
     admin: [
@@ -59,7 +69,7 @@ export default function Sidebar({ role, userLabel }) {
     patient: [
       { href: "/patient/dashboard", label: "Overview", icon: ICONS.overview },
       { href: "/patient/records", label: "Records", icon: ICONS.records },
-      { href: "/patient/emergency-profile", label: "Emergency profile", icon: ICONS.verify },
+      { href: "/patient/emergency-profile", label: "Basic profile", icon: ICONS.verify },
       { href: "/patient/consents", label: "Consent wallet", icon: ICONS.consents },
       { href: "/patient/prescriptions", label: "Prescriptions", icon: ICONS.prescriptions },
     ],
@@ -68,14 +78,14 @@ export default function Sidebar({ role, userLabel }) {
       { href: "/doctor/dashboard", label: "Overview", icon: ICONS.overview },
       { href: "/doctor/patients", label: "My patients", icon: ICONS.patients },
       { href: "/doctor/emergency", label: "Emergency access", icon: ICONS.approvals },
-      { href: "/doctor/emergency-profiles", label: "Emergency profiles", icon: ICONS.verify },
+      { href: "/doctor/emergency-profiles", label: "Basic profiles", icon: ICONS.verify },
       { href: "/doctor/records/new", label: "Add record", icon: ICONS.upload },
       { href: "/doctor/prescriptions/new", label: "Write prescription", icon: ICONS.writeRx },
     ],
 
     pharmacy: [
       { href: "/pharmacy/verify", label: "Shared prescriptions", icon: ICONS.verify },
-      { href: "/pharmacy/history", label: "Verification history", icon: ICONS.history },
+      { href: "/pharmacy/history", label: "Dispensing history", icon: ICONS.history },
     ],
   };
 
@@ -88,7 +98,7 @@ export default function Sidebar({ role, userLabel }) {
   );
 
   return (
-    <aside className="sidebar">
+    <aside id="portal-sidebar" className={`sidebar ${open ? "open" : ""}`} aria-label="Portal navigation">
       <div className="sidebar-brand">
         <div className="brand-mark">
           <svg
@@ -109,44 +119,44 @@ export default function Sidebar({ role, userLabel }) {
         <div className="brand-name">
           MediVault <small>{PORTAL_LABEL[role] || "Patient"} Portal</small>
         </div>
+
+        <button type="button" className="sidebar-close" onClick={onClose} aria-label="Close menu">
+          <Icon d={ICONS.close} />
+        </button>
       </div>
 
-      {finalLinks.map((l) => (
-        <Link
-          key={l.label}
-          href={l.href}
-          className={`nav-link ${pathname === l.href ? "active" : ""}`}
-        >
-          <Icon d={l.icon} />
-          {l.label}
-        </Link>
-      ))}
+      <nav className="sidebar-nav">
+        {finalLinks.map((l) => (
+          <Link
+            key={l.label}
+            href={l.href}
+            onClick={onClose}
+            className={`nav-link ${pathname === l.href ? "active" : ""}`}
+          >
+            <Icon d={l.icon} />
+            {l.label}
+          </Link>
+        ))}
+      </nav>
 
       <div className="sidebar-foot">
-        Signed in as
-        <div
-          style={{
-            color: "var(--ink)",
-            fontWeight: 600,
-            marginTop: 2,
-          }}
-        >
-          {userLabel}
+        <div className="sidebar-user" aria-label="Signed-in account">
+          <div className="sidebar-avatar" aria-hidden="true">
+            {String(userLabel || "U").charAt(0).toUpperCase()}
+          </div>
+          <div className="sidebar-user-text">
+            <div className="sidebar-user-name">{userLabel}</div>
+            {userEmail && userEmail !== userLabel && (
+              <div className="sidebar-user-email">{userEmail}</div>
+            )}
+          </div>
         </div>
 
-        <Link
-          href="/login"
-          style={{
-            color: "var(--primary)",
-            fontWeight: 600,
-            display: "inline-block",
-            marginTop: 8,
-          }}
-        >
+        <button type="button" className="sidebar-signout" onClick={signOut}>
+          <Icon d={ICONS.signOut} />
           Sign out
-        </Link>
+        </button>
       </div>
     </aside>
   );
 }
-

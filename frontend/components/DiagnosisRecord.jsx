@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { makeTextPdf, safeFilename, saveBlob } from "../lib/pdf";
+
 // Shared pieces for diagnosis records: the form fields a doctor fills in,
 // and the read-only view a doctor or patient sees.
 
@@ -58,22 +61,113 @@ export function IntegrityLine({ integrity }) {
   );
 }
 
-function base64ToBlob(base64, contentType) {
+export function base64ToBlob(base64, contentType) {
   const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
   return new Blob([bytes], { type: contentType || "application/octet-stream" });
 }
 
-export function saveBase64(attachment) {
-  const url = URL.createObjectURL(base64ToBlob(attachment.base64, attachment.contentType));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = attachment.filename || "attachment";
-  a.click();
-  URL.revokeObjectURL(url);
+function integrityText(integrity) {
+  if (!integrity) return "Not checked";
+  const legacy = integrity.signatureValid === null;
+  return `${integrity.verified ? "Verified" : legacy ? "Not signed" : "Could not be verified"}. Hash matches: ${integrity.hashValid ? "yes" : "no"}; doctor signature: ${legacy ? "none" : integrity.signatureValid ? "valid" : "invalid"}; on blockchain: ${integrity.onChain ? "yes" : "no"}.`;
+}
+
+// A typed record as a PDF the patient can keep.
+export function saveRecordPdf(view) {
+  const { record, form, attachment, integrity } = view;
+  const blocks = [
+    { type: "title", text: record.title || "Medical record" },
+    { type: "row", label: "Type", text: typeLabel(record.category) },
+    { type: "row", label: "Doctor", text: record.doctorName || "-" },
+    { type: "row", label: "Version", text: String(record.version ?? 1) },
+    { type: "row", label: "Date", text: record.createdAt ? new Date(record.createdAt).toLocaleString() : "-" },
+    { type: "heading", text: "Record" },
+    ...FORM_FIELDS.filter((f) => form?.[f.id]).map((f) => ({ type: "row", label: f.label, text: form[f.id] })),
+  ];
+  if (attachment) blocks.push({ type: "row", label: "Attached file", text: attachment.filename });
+  blocks.push({ type: "heading", text: "Verification" }, { type: "muted", text: integrityText(integrity) });
+  saveBlob(makeTextPdf(blocks), safeFilename(record.title || "medical-record", "pdf"));
+}
+
+// The attached file with "View file" (shown inline in the page) and
+// "Download". loadFile returns the file as a Blob.
+function AttachmentPanel({ attachment, loadFile }) {
+  const [preview, setPreview] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => () => preview && URL.revokeObjectURL(preview.url), [preview]);
+
+  async function getBlob() {
+    const blob = await loadFile();
+    // Use the stored content type so the browser can render the file.
+    return attachment.contentType && blob.type !== attachment.contentType
+      ? new Blob([blob], { type: attachment.contentType })
+      : blob;
+  }
+
+  async function toggleView() {
+    if (preview) return setPreview(null);
+    setBusy(true);
+    setError("");
+    try {
+      const blob = await getBlob();
+      setPreview({ url: URL.createObjectURL(blob), type: blob.type });
+    } catch (e) {
+      setError(e.message || "Couldn't open the file.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function download() {
+    setError("");
+    try {
+      saveBlob(await getBlob(), attachment.filename);
+    } catch (e) {
+      setError(e.message || "Couldn't download the file.");
+    }
+  }
+
+  const isImage = preview?.type.startsWith("image/");
+  const isPdf = preview?.type === "application/pdf";
+
+  return (
+    <div>
+      <p style={{ margin: 0, fontSize: 13.5 }}>
+        Attached file: <strong>{attachment.filename}</strong>{" "}
+        <span style={{ color: "var(--muted)" }}>({Math.max(1, Math.round((attachment.size || 0) / 1024))} KB)</span>{" "}
+        {loadFile && (
+          <span className="file-actions">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={toggleView} disabled={busy}>
+              {busy ? "Opening…" : preview ? "Hide file" : "View file"}
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={download}>
+              Download
+            </button>
+          </span>
+        )}
+      </p>
+      {error && <div className="error-text">{error}</div>}
+      {preview && (
+        <div className="file-preview">
+          {isImage ? (
+            <img src={preview.url} alt={attachment.filename} />
+          ) : isPdf ? (
+            <iframe src={preview.url} title={attachment.filename} />
+          ) : (
+            <p style={{ padding: 14, margin: 0 }}>
+              This file type can't be shown here. Use Download to open it.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // view = { record, form, attachment, integrity } as returned by the API.
-export function RecordView({ view, onDownload }) {
+export function RecordView({ view, loadFile }) {
   const { record, form, attachment, integrity } = view;
   return (
     <div>
@@ -83,6 +177,11 @@ export function RecordView({ view, onDownload }) {
           {typeLabel(record.category)} · version {record.version}
           {record.doctorName ? ` · by ${record.doctorName}` : ""}
         </span>
+        {form && (
+          <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }} onClick={() => saveRecordPdf(view)}>
+            Download record (PDF)
+          </button>
+        )}
       </div>
       <IntegrityLine integrity={integrity} />
       {form ? (
@@ -96,15 +195,7 @@ export function RecordView({ view, onDownload }) {
         </dl>
       ) : null}
       {attachment ? (
-        <p style={{ margin: 0, fontSize: 13.5 }}>
-          Attached file: <strong>{attachment.filename}</strong>{" "}
-          <span style={{ color: "var(--muted)" }}>({Math.max(1, Math.round((attachment.size || 0) / 1024))} KB)</span>{" "}
-          {onDownload && (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={onDownload}>
-              Download
-            </button>
-          )}
-        </p>
+        <AttachmentPanel key={record.id} attachment={attachment} loadFile={loadFile} />
       ) : (
         !form && <p style={{ color: "var(--muted)" }}>This record is empty.</p>
       )}

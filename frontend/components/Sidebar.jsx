@@ -68,7 +68,7 @@ export default function Sidebar({ role, userLabel, userEmail, open = false, onCl
 
     patient: [
       { href: "/patient/dashboard", label: "Overview", icon: ICONS.overview },
-      { href: "/patient/records", label: "Records", icon: ICONS.records },
+      { href: "/patient/records", label: "Lab reports", icon: ICONS.records },
       { href: "/patient/emergency-profile", label: "Basic profile", icon: ICONS.verify },
       { href: "/patient/consents", label: "Consent wallet", icon: ICONS.consents },
       { href: "/patient/prescriptions", label: "Prescriptions", icon: ICONS.prescriptions },
@@ -79,8 +79,7 @@ export default function Sidebar({ role, userLabel, userEmail, open = false, onCl
       { href: "/doctor/patients", label: "My patients", icon: ICONS.patients },
       { href: "/doctor/emergency", label: "Emergency access", icon: ICONS.approvals },
       { href: "/doctor/emergency-profiles", label: "Basic profiles", icon: ICONS.verify },
-      { href: "/doctor/records/new", label: "Add record", icon: ICONS.upload },
-      { href: "/doctor/prescriptions/new", label: "Write prescription", icon: ICONS.writeRx },
+      { href: "/doctor/records/new", label: "Add medical record", icon: ICONS.upload },
     ],
 
     pharmacy: [

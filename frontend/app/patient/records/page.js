@@ -123,8 +123,8 @@ export default function PatientRecords() {
     <PortalShell
       role="patient"
       eyebrow="Patient Portal"
-      title="Medical records"
-      subtitle="Doctors ask you before they add a record, view one, or edit one. Each approval works once."
+      title="Lab reports"
+      subtitle="Lab reports, scans and other documents from your doctors. Doctors ask you before they add, view or edit one, and each approval works once."
     >
       {error && <div className="error-text" role="alert">{error}</div>}
 
@@ -200,7 +200,7 @@ export default function PatientRecords() {
         {records === null ? (
           <p className="card-pad">Loading records…</p>
         ) : records.length === 0 ? (
-          <EmptyState title="No records yet" body="Records your doctor adds will appear here." />
+          <EmptyState title="No lab reports yet" body="Reports your doctor adds will appear here." />
         ) : (
           <table>
             <thead>

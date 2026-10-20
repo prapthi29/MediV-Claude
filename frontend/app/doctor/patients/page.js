@@ -205,26 +205,24 @@ export default function DoctorPatients() {
                       </td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <button type="button" className="btn btn-primary btn-sm" onClick={() => togglePatient(patientId)}>
-                          {isExpanded ? "Hide records" : "Records"}
+                          {isExpanded ? "Hide records" : "Medical records"}
                         </button>{" "}
                         <Link href={`/doctor/records/new?patient=${patientId}`} className="btn btn-ghost btn-sm">
-                          Add record
-                        </Link>{" "}
-                        <Link href={`/doctor/prescriptions/new?patient=${patientId}`} className="btn btn-ghost btn-sm">
-                          Prescribe
+                          Add medical record
                         </Link>
                       </td>
                     </tr>
                     {isExpanded && (
                       <tr>
                         <td colSpan={4}>
-                          {!records && <p>Loading records...</p>}
-                          {records?.length === 0 && <p>No records for this patient yet.</p>}
+                          <h4 style={{ margin: "8px 0 8px" }}>Lab reports</h4>
+                          {!records && <p>Loading lab reports...</p>}
+                          {records?.length === 0 && <p>No lab reports for this patient yet.</p>}
                           {records?.length > 0 && (
                             <table>
                               <thead>
                                 <tr>
-                                  <th>Record</th>
+                                  <th>Report</th>
                                   <th>Type</th>
                                   <th>Version</th>
                                   <th>Added</th>

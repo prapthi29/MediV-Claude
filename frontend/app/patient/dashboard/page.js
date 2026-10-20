@@ -139,7 +139,7 @@ export default function PatientDashboard() {
 
           <div className="grid grid-4" style={{ marginBottom: 20 }}>
             <StatCard label="Doctors with access" value={consents.length} icon={<ShieldIcon />} />
-            <StatCard label="Medical records" value={records.length} icon={<FileIcon />} />
+            <StatCard label="Lab reports" value={records.length} icon={<FileIcon />} />
             <StatCard
               label="Verified records"
               value={records.filter((r) => r.blockchainStatus === "registered").length}

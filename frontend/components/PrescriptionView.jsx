@@ -7,7 +7,7 @@ import { makeTextPdf, safeFilename, saveBlob } from "../lib/pdf";
 
 // A typed prescription as a PDF to keep.
 export function savePrescriptionPdf(view) {
-  const { prescription, medications, diagnosis, notes, integrity } = view;
+  const { prescription, medications, diagnosis, symptoms, notes, followUp, integrity } = view;
   const blocks = [
     { type: "title", text: prescription.title || "Prescription" },
     { type: "row", label: "Prescribed by", text: prescription.doctorName || "-" },
@@ -15,13 +15,15 @@ export function savePrescriptionPdf(view) {
     { type: "row", label: "Prescription ID", text: prescription.id },
   ];
   if (prescription.dispensedAt) blocks.push({ type: "row", label: "Dispensed", text: new Date(prescription.dispensedAt).toLocaleString() });
+  if (diagnosis) blocks.push({ type: "heading", text: "Diagnosis" }, { type: "text", text: diagnosis });
+  if (symptoms) blocks.push({ type: "heading", text: "Symptoms" }, { type: "text", text: symptoms });
   blocks.push({ type: "heading", text: "Medicines" });
   (medications || []).forEach((m, i) => {
     blocks.push({ type: "text", text: `${i + 1}. ${m.name}: ${[m.dose, m.frequency, m.duration].filter(Boolean).join(", ")}` });
     if (m.instructions) blocks.push({ type: "muted", text: `    ${m.instructions}` });
   });
-  if (diagnosis) blocks.push({ type: "heading", text: "Diagnosis" }, { type: "text", text: diagnosis });
   if (notes) blocks.push({ type: "heading", text: "Advice" }, { type: "text", text: notes });
+  if (followUp) blocks.push({ type: "heading", text: "Follow-up" }, { type: "text", text: followUp });
   blocks.push(
     { type: "heading", text: "Verification" },
     { type: "muted", text: integrity?.valid ? "Verified: this prescription is genuine and has not been changed." : "This prescription could not be verified." }
@@ -30,7 +32,7 @@ export function savePrescriptionPdf(view) {
 }
 
 export function PrescriptionView({ view, onDownload, loadFile }) {
-  const { prescription, medications, diagnosis, notes, integrity } = view;
+  const { prescription, medications, diagnosis, symptoms, notes, followUp, integrity } = view;
   return (
     <div>
       <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap", marginBottom: 6 }}>
@@ -80,20 +82,21 @@ export function PrescriptionView({ view, onDownload, loadFile }) {
           autoOpen
         />
       )}
-      {(diagnosis || notes) && (
-        <dl style={{ margin: "12px 0 0", display: "grid", gridTemplateColumns: "minmax(110px, 160px) 1fr", gap: "6px 14px", fontSize: 13.5 }}>
-          {diagnosis && (
-            <>
-              <dt style={{ color: "var(--muted)" }}>Diagnosis</dt>
-              <dd style={{ margin: 0 }}>{diagnosis}</dd>
-            </>
-          )}
-          {notes && (
-            <>
-              <dt style={{ color: "var(--muted)" }}>Advice</dt>
-              <dd style={{ margin: 0 }}>{notes}</dd>
-            </>
-          )}
+      {[diagnosis, symptoms, notes, followUp].some(Boolean) && (
+        <dl style={{ margin: "14px 0 0", display: "grid", gridTemplateColumns: "minmax(110px, 160px) 1fr", gap: "6px 14px", fontSize: 13.5 }}>
+          {[
+            ["Diagnosis", diagnosis],
+            ["Symptoms", symptoms],
+            ["Advice", notes],
+            ["Follow-up", followUp],
+          ]
+            .filter(([, value]) => value)
+            .map(([label, value]) => (
+              <div key={label} style={{ display: "contents" }}>
+                <dt style={{ color: "var(--muted)" }}>{label}</dt>
+                <dd style={{ margin: 0, whiteSpace: "pre-wrap" }}>{value}</dd>
+              </div>
+            ))}
         </dl>
       )}
     </div>

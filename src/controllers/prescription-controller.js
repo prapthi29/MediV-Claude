@@ -16,6 +16,8 @@ const createBody = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   medications: z.array(medication).min(1).max(20),
   diagnosis: z.string().trim().max(2000).optional(),
+  symptoms: z.string().trim().max(2000).optional(),
+  followUp: z.string().trim().max(500).optional(),
   notes: z.string().trim().max(2000).optional(),
   password: z.string().min(1).max(128)
 }).strict();

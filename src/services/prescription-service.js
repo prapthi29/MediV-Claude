@@ -77,7 +77,7 @@ export class PrescriptionService {
   // ISSUING A PRESCRIPTION
   // --------------------------------------------------
 
-  async create(doctorUserId, patientUserId, { title, medications, diagnosis, notes, approvalId, password }) {
+  async create(doctorUserId, patientUserId, { title, medications, diagnosis, symptoms, followUp, notes, approvalId, password }) {
     if (!Array.isArray(medications) || medications.length === 0) {
       throw new AppError(400, 'Add at least one medicine.', 'MEDICATIONS_REQUIRED');
     }
@@ -87,7 +87,7 @@ export class PrescriptionService {
     await assertProfileActive(this.userRepository, patientUserId);
     await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
 
-    const built = buildPrescription({ patientUserId, medications, diagnosis, notes });
+    const built = buildPrescription({ patientUserId, medications, diagnosis, symptoms, followUp, notes });
     // The doctor's password unlocks their ECDSA key; the server never signs without it.
     // Signing happens before the approval is used, so a mistyped password costs nothing.
     const { signature, signerAddress } = await this.signingKeyService.signDigest(doctorUserId, password, built.rootHash);
@@ -136,6 +136,8 @@ export class PrescriptionService {
       prescription: this.publicPrescription(prescription),
       medications: opened.document?.medications ?? null,
       diagnosis: opened.document?.diagnosis ?? null,
+      symptoms: opened.document?.symptoms ?? null,
+      followUp: opened.document?.followUp ?? null,
       notes: opened.document?.notes ?? null,
       integrity: opened.integrity
     };

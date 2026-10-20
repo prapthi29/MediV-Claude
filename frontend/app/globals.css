@@ -462,6 +462,26 @@ tbody tr:hover { background: var(--surface-2); }
 }
 textarea.input, .field textarea { resize: vertical; line-height: 1.5; }
 
+/* Prescription / lab report picker on "Add a medical record". */
+.kind-picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.kind-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 14px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.kind-option strong { font-size: 14px; }
+.kind-option span { font-size: 12.5px; color: var(--muted); }
+.kind-option:hover { border-color: var(--primary); }
+.kind-option.active { border-color: var(--primary); background: var(--primary-tint); }
+
 /* Inline file preview for medical record attachments. */
 .file-preview {
   margin-top: 14px;

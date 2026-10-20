@@ -382,7 +382,7 @@ export const api = {
   // ---------- prescriptions ----------
 
   // The doctor's password unlocks their signing key on the server for this one signature.
-  createPrescription: ({ patientId, approvalId, title, medications, diagnosis, notes, password }) =>
+  createPrescription: ({ patientId, approvalId, title, medications, diagnosis, symptoms, notes, followUp, password }) =>
     request("/doctor/prescriptions", {
       method: "POST",
       body: {
@@ -391,7 +391,9 @@ export const api = {
         title: title || undefined,
         medications,
         diagnosis: diagnosis || undefined,
+        symptoms: symptoms || undefined,
         notes: notes || undefined,
+        followUp: followUp || undefined,
         password,
       },
     }).then((r) => r.prescription),

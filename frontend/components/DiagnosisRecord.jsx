@@ -14,6 +14,13 @@ export const RECORD_TYPES = [
   { id: "other", label: "Other" },
 ];
 
+// What a doctor can choose when uploading a lab report.
+export const REPORT_TYPES = [
+  { id: "lab-result", label: "Lab report" },
+  { id: "imaging", label: "Imaging (X-ray, scan)" },
+  { id: "other", label: "Other document" },
+];
+
 export const FORM_FIELDS = [
   { id: "diagnosis", label: "Diagnosis", required: true, rows: 2 },
   { id: "symptoms", label: "Symptoms", rows: 2 },

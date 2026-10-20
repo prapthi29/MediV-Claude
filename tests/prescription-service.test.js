@@ -248,6 +248,15 @@ describe('prescription service', () => {
     await expect(service.shareWithPharmacy('patient', prescription.id, 'PH-002')).rejects.toMatchObject({ code: 'PRESCRIPTION_ALREADY_DISPENSED' });
   });
 
+  it('keeps symptoms and follow-up in the verified prescription', async () => {
+    const { service, prescriptionRepository } = await setup();
+    const approvalId = await approved(service, 'doctor');
+    const prescription = await service.create('doctor', 'patient', { ...form, symptoms: 'Fever for 3 days', followUp: 'Review in a week', approvalId, password: PASSWORD });
+    const view = await service.viewForPatient('patient', prescription.id);
+    expect(view).toMatchObject({ symptoms: 'Fever for 3 days', followUp: 'Review in a week' });
+    await expect(integrityOf(service, prescriptionRepository, prescription.id)).resolves.toMatchObject({ valid: true });
+  });
+
   it('lets a linked doctor read the patient prescriptions, and no one else', async () => {
     const { service } = await setup();
     const approvalId = await approved(service, 'doctor');

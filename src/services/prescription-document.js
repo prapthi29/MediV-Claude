@@ -26,8 +26,13 @@ export function medicationsSha256(medications) {
   return sha256Hex(stableStringify(medications));
 }
 
-export function clinicalSha256({ diagnosis = null, notes = null }) {
-  return sha256Hex(stableStringify({ diagnosis: diagnosis || null, notes: notes || null }));
+// Symptoms and follow-up are hashed only when present, so prescriptions
+// written before they existed keep the same hash.
+export function clinicalSha256({ diagnosis = null, notes = null, symptoms = null, followUp = null }) {
+  const clinical = { diagnosis: diagnosis || null, notes: notes || null };
+  if (symptoms) clinical.symptoms = symptoms;
+  if (followUp) clinical.followUp = followUp;
+  return sha256Hex(stableStringify(clinical));
 }
 
 export function prescriptionRootSha256({ patientUserId, medicationsHash, clinicalHash }) {
@@ -42,9 +47,11 @@ export function prescriptionRootSha256({ patientUserId, medicationsHash, clinica
 }
 
 // Builds the stored document and every hash for a new prescription.
-export function buildPrescription({ patientUserId, medications, diagnosis, notes }) {
+export function buildPrescription({ patientUserId, medications, diagnosis, notes, symptoms, followUp }) {
   const meds = normaliseMedications(medications);
   const clinical = { diagnosis: diagnosis?.trim() || null, notes: notes?.trim() || null };
+  if (symptoms?.trim()) clinical.symptoms = symptoms.trim();
+  if (followUp?.trim()) clinical.followUp = followUp.trim();
   const medicationsHash = medicationsSha256(meds);
   const clinicalHash = clinicalSha256(clinical);
   const document = { medications: meds, ...clinical };

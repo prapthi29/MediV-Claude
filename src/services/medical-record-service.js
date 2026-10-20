@@ -48,10 +48,11 @@ export class MedicalRecordService {
 
   // Normalises the doctor's input into one bundle: a form, a file, or both.
   buildBundle({ form, file }, existingAttachment = null) {
-    const cleanForm = this.cleanForm(form);
     const attachment = file?.buffer?.length
       ? { filename: file.originalname, contentType: file.mimetype, buffer: file.buffer }
       : existingAttachment;
+    // A report file can carry notes without a diagnosis.
+    const cleanForm = this.cleanForm(form, { requireDiagnosis: !attachment });
 
     if (!cleanForm && !attachment) {
       throw new AppError(
@@ -75,7 +76,7 @@ export class MedicalRecordService {
     };
   }
 
-  cleanForm(form) {
+  cleanForm(form, { requireDiagnosis = true } = {}) {
     if (!form || typeof form !== 'object') return null;
     const clean = {};
     for (const field of DIAGNOSIS_FORM_FIELDS) {
@@ -83,7 +84,7 @@ export class MedicalRecordService {
       if (value) clean[field] = value;
     }
     if (Object.keys(clean).length === 0) return null;
-    if (!clean.diagnosis) {
+    if (requireDiagnosis && !clean.diagnosis) {
       throw new AppError(400, 'The diagnosis field is required when using the form.', 'DIAGNOSIS_REQUIRED');
     }
     return clean;

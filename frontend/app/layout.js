@@ -2,7 +2,7 @@ import "./globals.css";
 
 export const metadata = {
   title: "MediVault",
-  description: "Blockchain-backed EHR — patient and admin portals",
+  description: "Your health records, all in one place. One platform for patients, doctors, and pharmacies.",
 };
 
 export default function RootLayout({ children }) {

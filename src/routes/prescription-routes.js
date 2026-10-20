@@ -45,6 +45,11 @@ export function createDoctorPrescriptionRouter(
     controller.listApprovalsForDoctor
   );
 
+  // A linked doctor can read the patient's prescriptions.
+  router.get("/patients/:patientId/prescriptions", authenticate(authService), authorize("doctor"), controller.listForDoctor);
+  router.get("/patients/:patientId/prescriptions/:prescriptionId", authenticate(authService), authorize("doctor"), controller.viewForDoctor);
+  router.get("/patients/:patientId/prescriptions/:prescriptionId/download", authenticate(authService), authorize("doctor"), controller.downloadForDoctor);
+
   return router;
 }
 

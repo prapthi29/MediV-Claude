@@ -191,6 +191,7 @@ export default function PatientRecords() {
           <RecordView
             view={open}
             loadFile={() => api.fetchOwnRecordFile(open.record.id)}
+            autoOpenFile
           />
         </div>
       )}
@@ -229,7 +230,7 @@ export default function PatientRecords() {
                       Download
                     </button>{" "}
                     <button className="btn btn-primary btn-sm" onClick={() => toggle(r.id)}>
-                      {open?.record.id === r.id ? "Close" : "Open"}
+                      {open?.record.id === r.id ? "Close" : "View"}
                     </button>
                   </td>
                 </tr>

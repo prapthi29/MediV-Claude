@@ -82,7 +82,7 @@ export default function NewPrescription() {
     if (meds.some((m) => !m.name.trim() || !m.dose.trim() || !m.frequency.trim() || !m.duration.trim())) {
       return setError("Each medicine needs a name, dose, how often and for how long.");
     }
-    if (!password) return setError("Enter your password to sign the prescription.");
+    if (!password) return setError("Enter your password to confirm the prescription.");
     setBusy(true);
     try {
       const result = await api.createPrescription({
@@ -115,7 +115,7 @@ export default function NewPrescription() {
       role="doctor"
       eyebrow="Doctor Portal"
       title="Write a prescription"
-      subtitle="The patient approves each prescription first. You sign it with your password and its hash goes on the blockchain."
+      subtitle="The patient approves each prescription first. You confirm it with your password."
     >
       <div className="card card-pad" style={{ maxWidth: 860 }}>
         <div className="field">
@@ -132,7 +132,7 @@ export default function NewPrescription() {
 
         {issued && (
           <p style={{ color: "var(--primary)", fontWeight: 600 }}>
-            Prescription signed and issued. That approval is now used; ask again for another prescription.{" "}
+            Prescription issued. That approval is now used; ask again for another prescription.{" "}
             <Link href="/doctor/patients">Back to patients</Link>
           </p>
         )}
@@ -191,12 +191,12 @@ export default function NewPrescription() {
               <textarea id="rx-notes" rows={2} maxLength={2000} value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
             <div className="field">
-              <label htmlFor="sign-password">Your password (signs the prescription)</label>
+              <label htmlFor="sign-password">Your password</label>
               <input id="sign-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
             {error && <div className="error-text">{error}</div>}
             <button className="btn btn-primary" type="submit" disabled={busy}>
-              {busy ? "Signing…" : "Sign and issue prescription"}
+              {busy ? "Issuing…" : "Issue prescription"}
             </button>
           </form>
         )}

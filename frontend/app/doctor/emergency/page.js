@@ -30,7 +30,7 @@ function BasicProfile({ profile }) {
         <strong style={{ color: profile.integrity?.verified ? "var(--primary)" : "var(--red)" }}>
           {profile.integrity?.verified ? "Verified" : "Could not be verified"}
         </strong>
-        {profile.signature?.signedByDoctorName ? ` · signed by ${profile.signature.signedByDoctorName}, version ${profile.version}` : ""}
+        {profile.signature?.signedByDoctorName ? ` · added by ${profile.signature.signedByDoctorName}, version ${profile.version}` : ""}
       </p>
       <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "minmax(130px, 180px) 1fr", gap: "6px 14px", fontSize: 13.5 }}>
         {rows.map(([label, value]) => (
@@ -69,7 +69,7 @@ export default function EmergencyAccess() {
     setError("");
     if (!healthId.trim()) return setError("Enter the patient's health ID.");
     if (reason.trim().length < 10) return setError("Describe the emergency in at least 10 characters.");
-    if (!password) return setError("Enter your password to sign the request.");
+    if (!password) return setError("Enter your password to confirm the request.");
     setBusy(true);
     try {
       await api.grantEmergencyAccess({ patientId: healthId.trim(), reason: reason.trim(), durationMinutes: duration, password });
@@ -101,7 +101,7 @@ export default function EmergencyAccess() {
       role="doctor"
       eyebrow="Doctor Portal"
       title="Emergency access"
-      subtitle="For emergencies only. You sign the request with your password, the patient is alerted at once and can end it, and you see their basic profile only."
+      subtitle="For emergencies only. You confirm the request with your password, the patient is alerted at once and can end it, and you see their basic profile only."
     >
       <div className="grid grid-2" style={{ alignItems: "start" }}>
         <form className="card card-pad" onSubmit={breakGlass}>
@@ -125,12 +125,12 @@ export default function EmergencyAccess() {
             </div>
           </div>
           <div className="field">
-            <label htmlFor="eg-password">Your password (signs the request)</label>
+            <label htmlFor="eg-password">Your password</label>
             <input id="eg-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           {error && <div className="error-text">{error}</div>}
           <button className="btn btn-danger" type="submit" disabled={busy}>
-            {busy ? "Signing and verifying…" : "Sign and open emergency access"}
+            {busy ? "Opening…" : "Open emergency access"}
           </button>
         </form>
 
@@ -143,7 +143,7 @@ export default function EmergencyAccess() {
                 <div>
                   <strong>{g.patientName || "Patient"}</strong> <span className="mono" style={{ color: "var(--muted)", fontSize: 12 }}>{g.patientHealthId}</span>
                   <div style={{ fontSize: 12.5 }}>
-                    <TimeLeft until={g.expiresAt} onExpire={load} /> · signature verified
+                    <TimeLeft until={g.expiresAt} onExpire={load} /> · verified
                   </div>
                 </div>
                 <button type="button" className="btn btn-primary btn-sm" onClick={() => viewProfile(g.patientUserId)}>

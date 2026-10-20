@@ -77,7 +77,7 @@ export default function NewRecord() {
     const useFile = mode !== "form";
     if (useForm && !form.diagnosis?.trim()) return setError("Enter the diagnosis.");
     if (useFile && !file) return setError("Choose a file to attach.");
-    if (!password) return setError("Enter your password to sign the record.");
+    if (!password) return setError("Enter your password to confirm the record.");
     setBusy(true);
     try {
       const record = await api.saveRecord({
@@ -109,7 +109,7 @@ export default function NewRecord() {
       role="doctor"
       eyebrow="Doctor Portal"
       title="Add a medical record"
-      subtitle="The patient approves each new record first. You sign it with your password, it is encrypted with AES-256, and its SHA-256 hash goes on the blockchain."
+      subtitle="The patient approves each new record first. You confirm it with your password, and it is stored securely."
     >
       <div className="card card-pad" style={{ maxWidth: 760 }}>
         <div className="field">
@@ -127,7 +127,7 @@ export default function NewRecord() {
 
         {saved && (
           <p style={{ color: "var(--primary)", fontWeight: 600 }}>
-            Saved and signed: “{saved.title || "Medical record"}”. That approval is now used; ask again to add another record.{" "}
+            Saved: “{saved.title || "Medical record"}”. That approval is now used; ask again to add another record.{" "}
             <Link href="/doctor/patients">Back to patients</Link>
           </p>
         )}
@@ -188,12 +188,12 @@ export default function NewRecord() {
               </div>
             )}
             <div className="field">
-              <label htmlFor="sign-password">Your password (signs the record)</label>
+              <label htmlFor="sign-password">Your password</label>
               <input id="sign-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
             {error && <div className="error-text">{error}</div>}
             <button className="btn btn-primary" type="submit" disabled={busy}>
-              {busy ? "Signing and saving…" : "Sign and save record"}
+              {busy ? "Saving…" : "Save record"}
             </button>
           </form>
         )}

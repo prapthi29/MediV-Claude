@@ -77,12 +77,12 @@ export class SigningKeyService {
       throw new AppError(400, 'A SHA-256 digest is required for signing.', 'INVALID_DIGEST');
     }
     if (typeof password !== 'string' || !password) {
-      throw new AppError(400, 'Enter your password to sign.', 'SIGNING_PASSWORD_REQUIRED');
+      throw new AppError(400, 'Enter your password to confirm.', 'SIGNING_PASSWORD_REQUIRED');
     }
 
     const key = await this.signingKeyRepository.findActiveForUser(userId);
     if (!key) {
-      throw new AppError(409, 'No signing key exists for this account. Sign out and sign in again to create one.', 'SIGNING_KEY_MISSING');
+      throw new AppError(409, 'Your account is not ready yet. Sign out and sign in again, then try once more.', 'SIGNING_KEY_MISSING');
     }
 
     let privateKey;
@@ -96,7 +96,7 @@ export class SigningKeyService {
         decipher.final()
       ]);
     } catch {
-      throw new AppError(401, 'Incorrect password. Nothing was signed.', 'INVALID_SIGNING_PASSWORD');
+      throw new AppError(401, 'Incorrect password. Nothing was saved.', 'INVALID_SIGNING_PASSWORD');
     } finally {
       derivedKey?.fill(0);
     }

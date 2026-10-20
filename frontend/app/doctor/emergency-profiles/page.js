@@ -44,30 +44,18 @@ function IntegrityNote({ profile }) {
   if (!signature?.profileSha256) {
     return (
       <p style={{ color: "var(--amber)", fontSize: 13, margin: "0 0 12px" }}>
-        This profile was saved before signing was added. The next approved edit will sign it.
+        This profile was saved before verification was available. The next approved edit will verify it.
       </p>
     );
   }
-  const checks = integrity
-    ? [
-        ["Hash matches", integrity.hashValid],
-        ["Doctor signature", integrity.signatureValid],
-        ["On blockchain", integrity.onChain],
-      ]
-    : [];
   return (
     <div style={{ fontSize: 13, margin: "0 0 14px", color: "var(--muted)" }}>
       <div style={{ fontWeight: 600, color: integrity?.verified ? "var(--primary)" : "var(--red)" }}>
-        {integrity?.verified ? "Signature verified" : "Verification failed"}
+        {integrity?.verified ? "✓ Verified" : "Could not be verified"}
       </div>
       <div>
-        Version {profile.version} · signed by {signature.signedByDoctorName || "doctor"} on{" "}
-        {fmtDate(signature.signedAt)} · key{" "}
-        <span className="mono">{signature.signerAddress?.slice(0, 10)}…</span>
+        Version {profile.version} · saved by {signature.signedByDoctorName || "doctor"} on {fmtDate(signature.signedAt)}
       </div>
-      {!integrity?.verified && (
-        <div>{checks.map(([label, ok]) => `${label}: ${ok ? "yes" : "no"}`).join(" · ")}</div>
-      )}
     </div>
   );
 }
@@ -536,7 +524,7 @@ export default function DoctorEmergencyProfiles() {
     }
 
     if (!reason.trim()) return "Enter a reason for this change.";
-    if (!password) return "Enter your password to sign this profile.";
+    if (!password) return "Enter your password to confirm this profile.";
     if (!activeApproval?.id) {
       return "An approved permission is required before saving.";
     }
@@ -597,7 +585,7 @@ export default function DoctorEmergencyProfiles() {
       setReason("");
       setPassword("");
       setActiveApproval(null);
-      setNotice("Profile signed and saved.");
+      setNotice("Basic profile saved.");
 
       try {
         // A separate approved view permission is needed for protected audit access.
@@ -981,7 +969,7 @@ export default function DoctorEmergencyProfiles() {
             </label>
 
             <label style={{ display: "block", marginBottom: 12 }}>
-              Your password (to sign)
+              Your password
               <input
                 className="input"
                 type="password"
@@ -991,7 +979,7 @@ export default function DoctorEmergencyProfiles() {
                 style={{ display: "block", width: "100%", marginTop: 5 }}
               />
               <span style={{ color: "var(--muted)", fontSize: 13 }}>
-                Unlocks your signing key for this one signature.
+                Confirms that you are saving this profile.
               </span>
             </label>
 
@@ -1004,8 +992,8 @@ export default function DoctorEmergencyProfiles() {
               {saving
                 ? "Signing..."
                 : creating
-                  ? "Sign and create basic profile"
-                  : "Sign and save changes"}
+                  ? "Create basic profile"
+                  : "Save changes"}
             </button>
 
             <p
@@ -1016,9 +1004,8 @@ export default function DoctorEmergencyProfiles() {
                 marginTop: 12,
               }}
             >
-              Each saved version is signed with your ECDSA key and its SHA-256
-              hash is recorded on the blockchain. The patient's approval is
-              used up once you save.
+              Every saved version is kept and verified. The patient's approval
+              is used up once you save.
             </p>
           </section>
         </>

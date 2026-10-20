@@ -73,7 +73,7 @@ export default function EditRecord() {
     const hasForm = Object.values(form).some((v) => v && String(v).trim());
     if (hasForm && !form.diagnosis?.trim()) return setError("Enter the diagnosis, or clear the form.");
     if (!hasForm && !file && !(keepFile && current?.attachment)) return setError("The record needs a form, a file, or both.");
-    if (!password) return setError("Enter your password to sign the new version.");
+    if (!password) return setError("Enter your password to confirm the new version.");
     setBusy(true);
     try {
       const updated = await api.saveRecord({
@@ -106,7 +106,7 @@ export default function EditRecord() {
       role="doctor"
       eyebrow="Doctor Portal"
       title="Edit a medical record"
-      subtitle="Each edit needs the patient's approval and creates a new signed version. Earlier versions stay on record."
+      subtitle="Each edit needs the patient's approval and creates a new version. Earlier versions stay on record."
     >
       <div className="card card-pad" style={{ maxWidth: 760 }}>
         {record === null && <p>This record wasn't found, or your 30-minute access has ended.</p>}
@@ -117,7 +117,7 @@ export default function EditRecord() {
         )}
         {saved && (
           <p style={{ color: "var(--primary)", fontWeight: 600 }}>
-            Saved and signed as version {saved.version}. <Link href="/doctor/patients">Back to patients</Link>
+            Saved as version {saved.version}. <Link href="/doctor/patients">Back to patients</Link>
           </p>
         )}
         {canAsk && (
@@ -156,11 +156,11 @@ export default function EditRecord() {
               <div className="field-hint">A new file replaces the current one.</div>
             </div>
             <div className="field">
-              <label htmlFor="sign-password">Your password (signs the new version)</label>
+              <label htmlFor="sign-password">Your password</label>
               <input id="sign-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
             <button className="btn btn-primary" type="submit" disabled={busy}>
-              {busy ? "Signing and saving…" : "Sign and save new version"}
+              {busy ? "Saving…" : "Save new version"}
             </button>
           </form>
         )}

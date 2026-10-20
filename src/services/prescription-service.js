@@ -149,6 +149,28 @@ export class PrescriptionService {
     return { prescription: this.publicPrescription(prescription), body };
   }
 
+  // A doctor the patient has linked (active consent) can read the patient's prescriptions.
+  async listForDoctor(doctorUserId, patientUserId) {
+    await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
+    return this.listForPatient(patientUserId);
+  }
+
+  async viewForDoctor(doctorUserId, patientUserId, prescriptionId) {
+    await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
+    const view = await this.viewForPatient(patientUserId, prescriptionId);
+    await this.auditService?.record({ eventType: 'prescription_accessed', actorUserId: doctorUserId, subjectUserId: patientUserId, resourceType: 'prescription', resourceId: prescriptionId, metadata: {} });
+    return view;
+  }
+
+  async downloadForDoctor(doctorUserId, patientUserId, prescriptionId) {
+    await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
+    const prescription = await this.findForPatient(patientUserId, prescriptionId);
+    const { body: ciphertext } = await this.medicalStorage.get({ key: prescription.storage_key });
+    const body = this.fileEncryptionService.decrypt(ciphertext, prescription);
+    await this.auditService?.record({ eventType: 'prescription_accessed', actorUserId: doctorUserId, subjectUserId: patientUserId, resourceType: 'prescription', resourceId: prescription.id, metadata: {} });
+    return { prescription: this.publicPrescription(prescription), body };
+  }
+
   async findForPatient(patientUserId, prescriptionId) {
     const prescription = await this.prescriptionRepository.findById(prescriptionId);
     if (!prescription || prescription.patient_user_id !== patientUserId) {

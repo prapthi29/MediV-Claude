@@ -13,8 +13,8 @@ const ACTION_LABEL = {
   record_uploaded: "Record uploaded",
   user_approved: "Account approved",
   user_rejected: "Account rejected",
-  basic_profile_created: "Basic profile created and signed",
-  basic_profile_updated: "Basic profile updated and signed",
+  basic_profile_created: "Basic profile created",
+  basic_profile_updated: "Basic profile updated",
   record_created: "Record added",
   record_version_created: "Record edited",
   record_accessed: "Record viewed",
@@ -132,7 +132,7 @@ export default function PatientDashboard() {
               <div style={{ fontSize: 13, color: "var(--muted)" }}>
                 Give a doctor access with their license ID on the{" "}
                 <a href="/patient/consents" style={{ color: "var(--primary)" }}>Consent wallet</a> page. They will
-                ask permission to create your basic profile, and once they sign it, records and prescriptions can be added.
+                ask permission to create your basic profile, and once it is saved, records and prescriptions can be added.
               </div>
             </div>
           )}
@@ -141,7 +141,7 @@ export default function PatientDashboard() {
             <StatCard label="Doctors with access" value={consents.length} icon={<ShieldIcon />} />
             <StatCard label="Medical records" value={records.length} icon={<FileIcon />} />
             <StatCard
-              label="Records on-chain"
+              label="Verified records"
               value={records.filter((r) => r.blockchainStatus === "registered").length}
               icon={<PillIcon />}
             />

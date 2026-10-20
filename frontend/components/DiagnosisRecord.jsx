@@ -48,15 +48,12 @@ export function DiagnosisFields({ value, onChange }) {
 export function IntegrityLine({ integrity }) {
   if (!integrity) return null;
   const ok = integrity.verified;
-  const legacy = integrity.signatureValid === null;
   return (
     <p style={{ fontSize: 13, margin: "0 0 12px" }}>
       <strong style={{ color: ok ? "var(--primary)" : "var(--red)" }}>
-        {ok ? "Verified" : legacy ? "Not signed" : "Could not be verified"}
+        {ok ? "✓ Verified" : "Could not be verified"}
       </strong>
-      {" · "}hash matches: {integrity.hashValid ? "yes" : "no"}; doctor signature:{" "}
-      {legacy ? "none (added before signing)" : integrity.signatureValid ? "valid" : "invalid"}; on blockchain:{" "}
-      {integrity.onChain ? "yes" : "no"}
+      {ok ? " · this record is genuine and has not been changed." : " · please contact your doctor about this record."}
     </p>
   );
 }
@@ -67,9 +64,7 @@ export function base64ToBlob(base64, contentType) {
 }
 
 function integrityText(integrity) {
-  if (!integrity) return "Not checked";
-  const legacy = integrity.signatureValid === null;
-  return `${integrity.verified ? "Verified" : legacy ? "Not signed" : "Could not be verified"}. Hash matches: ${integrity.hashValid ? "yes" : "no"}; doctor signature: ${legacy ? "none" : integrity.signatureValid ? "valid" : "invalid"}; on blockchain: ${integrity.onChain ? "yes" : "no"}.`;
+  return integrity?.verified ? "Verified: this record is genuine and has not been changed." : "This record could not be verified.";
 }
 
 // A typed record as a PDF the patient can keep.
@@ -91,12 +86,18 @@ export function saveRecordPdf(view) {
 
 // The attached file with "View file" (shown inline in the page) and
 // "Download". loadFile returns the file as a Blob.
-function AttachmentPanel({ attachment, loadFile }) {
+export function AttachmentPanel({ attachment, loadFile, autoOpen = false }) {
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => () => preview && URL.revokeObjectURL(preview.url), [preview]);
+
+  useEffect(() => {
+    if (autoOpen && loadFile) toggleView();
+    // Open once when the panel first appears.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function getBlob() {
     const blob = await loadFile();
@@ -136,7 +137,7 @@ function AttachmentPanel({ attachment, loadFile }) {
     <div>
       <p style={{ margin: 0, fontSize: 13.5 }}>
         Attached file: <strong>{attachment.filename}</strong>{" "}
-        <span style={{ color: "var(--muted)" }}>({Math.max(1, Math.round((attachment.size || 0) / 1024))} KB)</span>{" "}
+        {attachment.size ? <span style={{ color: "var(--muted)" }}>({Math.max(1, Math.round(attachment.size / 1024))} KB)</span> : null}{" "}
         {loadFile && (
           <span className="file-actions">
             <button type="button" className="btn btn-ghost btn-sm" onClick={toggleView} disabled={busy}>
@@ -167,7 +168,7 @@ function AttachmentPanel({ attachment, loadFile }) {
 }
 
 // view = { record, form, attachment, integrity } as returned by the API.
-export function RecordView({ view, loadFile }) {
+export function RecordView({ view, loadFile, autoOpenFile = false }) {
   const { record, form, attachment, integrity } = view;
   return (
     <div>
@@ -195,7 +196,7 @@ export function RecordView({ view, loadFile }) {
         </dl>
       ) : null}
       {attachment ? (
-        <AttachmentPanel key={record.id} attachment={attachment} loadFile={loadFile} />
+        <AttachmentPanel key={record.id} attachment={attachment} loadFile={loadFile} autoOpen={autoOpenFile} />
       ) : (
         !form && <p style={{ color: "var(--muted)" }}>This record is empty.</p>
       )}

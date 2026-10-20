@@ -94,7 +94,7 @@ export class MedicalRecordService {
       throw new AppError(503, 'Record signing is not configured.', 'SIGNING_UNAVAILABLE');
     }
     if (typeof password !== 'string' || !password) {
-      throw new AppError(400, 'Enter your password to sign this record.', 'SIGNING_PASSWORD_REQUIRED');
+      throw new AppError(400, 'Enter your password to confirm this record.', 'SIGNING_PASSWORD_REQUIRED');
     }
     const digest = recordSignatureDigest({ patientUserId, version, contentSha256, title, category });
     const { signature, signerAddress } = await this.signingKeyService.signDigest(doctorUserId, password, digest);

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "../../lib/api";
+import EyeToggle from "../../components/EyeToggle";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -283,6 +284,7 @@ export default function RegisterPage() {
 
           <div className="field">
             <label htmlFor="password">Password</label>
+            <div className="password-wrap">
             <input
               id="password"
               type={showPassword ? "text" : "password"}
@@ -294,7 +296,8 @@ export default function RegisterPage() {
               placeholder="At least 12 characters"
               aria-describedby="password-requirements"
             />
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? "Hide" : "Show"} password</button>
+            <EyeToggle shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
+            </div>
 
             <div
               id="password-requirements"
@@ -322,6 +325,7 @@ export default function RegisterPage() {
 
           <div className="field">
             <label htmlFor="confirm">Confirm password</label>
+            <div className="password-wrap">
             <input
               id="confirm"
               type={showConfirm ? "text" : "password"}
@@ -331,7 +335,8 @@ export default function RegisterPage() {
               onChange={(event) => set("confirm", event.target.value)}
               placeholder="Re-enter your password"
             />
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowConfirm((v) => !v)} aria-label={showConfirm ? "Hide confirm password" : "Show confirm password"}>{showConfirm ? "Hide" : "Show"} confirm password</button>
+            <EyeToggle shown={showConfirm} onToggle={() => setShowConfirm((v) => !v)} label="confirm password" />
+            </div>
 
             {form.confirm.length > 0 && (
               <div className="field-hint">

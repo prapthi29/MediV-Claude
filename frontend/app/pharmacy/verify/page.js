@@ -6,15 +6,6 @@ import { EmptyState, StatusBadge, fmtDateTime } from "../../../components/ui";
 import { api } from "../../../lib/api";
 import { verifyPrescriptionInBrowser } from "../../../lib/verify-prescription";
 
-function Check({ ok, label }) {
-  return (
-    <tr>
-      <td style={{ color: "var(--muted)", width: 260 }}>{label}</td>
-      <td style={{ fontWeight: 600, color: ok ? "var(--primary)" : "var(--red)" }}>{ok ? "Yes" : "No"}</td>
-    </tr>
-  );
-}
-
 export default function SharedPrescriptions() {
   const [shares, setShares] = useState(null);
   const [open, setOpen] = useState(null);
@@ -55,7 +46,7 @@ export default function SharedPrescriptions() {
 
   async function dispense(e) {
     e.preventDefault();
-    if (!password) return setError("Enter your password to sign the dispense.");
+    if (!password) return setError("Enter your password to confirm.");
     setBusy(true);
     setError("");
     try {
@@ -64,7 +55,7 @@ export default function SharedPrescriptions() {
       // Dispensing ends this pharmacy's access to the prescription.
       setOpen(null);
       setBrowserCheck(null);
-      setNotice("Dispensed and signed with your pharmacy key. Your access to this prescription has ended; it's listed in your dispensing history.");
+      setNotice("Marked as dispensed. This prescription is no longer available to you; it's listed in your dispensing history.");
       load();
     } catch (err) {
       setError(err.message || "Couldn't mark this prescription as dispensed.");
@@ -178,32 +169,38 @@ export default function SharedPrescriptions() {
             </tbody>
           </table>
 
-          <table style={{ marginBottom: 16 }}>
-            <tbody>
-              <Check ok={browserCheck?.signatureMatches} label="Doctor's signature (checked in your browser)" />
-              <Check ok={browserCheck?.medicinesMatch} label="Medicines match what the doctor signed" />
-              <Check ok={open.integrity.contentHashValid} label="Stored prescription unchanged" />
-              <Check ok={open.integrity.blockchainValid} label="Hash recorded on the blockchain" />
-            </tbody>
-          </table>
-          <p className="mono" style={{ fontSize: 11.5, color: "var(--muted)", wordBreak: "break-all", margin: "0 0 16px" }}>
-            Signer {open.proof.signerAddress} · hash {open.proof.rootSha256}
-          </p>
+          <div
+            role="status"
+            style={{
+              marginBottom: 16,
+              padding: "12px 14px",
+              borderRadius: 10,
+              fontWeight: 600,
+              background: browserCheck === null ? "var(--surface-2)" : verified ? "var(--mint-tint)" : "var(--red-tint)",
+              color: browserCheck === null ? "var(--muted)" : verified ? "var(--mint)" : "var(--red)",
+            }}
+          >
+            {browserCheck === null
+              ? "Checking this prescription…"
+              : verified
+                ? "Verified: this prescription is genuine and has not been changed."
+                : "Not verified: this prescription could not be confirmed."}
+          </div>
 
           {open.dispensed ? (
             <p style={{ fontWeight: 600, margin: 0 }}>Dispensed on {fmtDateTime(open.dispensed.at)}.</p>
           ) : verified ? (
             <form onSubmit={dispense} style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
               <div className="field" style={{ marginBottom: 0, flex: "1 1 240px" }}>
-                <label htmlFor="dispense-password">Your password (signs the dispense)</label>
+                <label htmlFor="dispense-password">Your password</label>
                 <input id="dispense-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
               </div>
               <button className="btn btn-primary" type="submit" disabled={busy}>
-                {busy ? "Signing…" : "Mark as dispensed"}
+                {busy ? "Saving…" : "Mark as dispensed"}
               </button>
             </form>
           ) : (
-            <p style={{ color: "var(--red)", fontWeight: 600, margin: 0 }}>Do not dispense: this prescription did not verify.</p>
+            <p style={{ color: "var(--red)", fontWeight: 600, margin: 0 }}>Do not dispense this prescription.</p>
           )}
           {notice && <p style={{ color: "var(--primary)", fontWeight: 600, marginBottom: 0 }}>{notice}</p>}
         </div>

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "../../lib/api";
+import EyeToggle from "../../components/EyeToggle";
 
 const ROLES = [
   { id: "patient", label: "Patient" },
@@ -112,8 +113,10 @@ export default function LoginPage() {
             </div>
             <div className="field">
               <label>Password</label>
-              <input type={showPassword ? "text" : "password"} required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowPassword((v) => !v)}>{showPassword ? "Hide" : "Show"} password</button>
+              <div className="password-wrap">
+                <input type={showPassword ? "text" : "password"} required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
+                <EyeToggle shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
+              </div>
             </div>
 
             {error && <div className="error-text">{error}</div>}

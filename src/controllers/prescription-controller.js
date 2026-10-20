@@ -21,6 +21,7 @@ const createBody = z.object({
 }).strict();
 const prescriptionId = z.object({ prescriptionId: z.string().uuid() });
 const patientParams = z.object({ patientId });
+const patientPrescriptionParams = z.object({ patientId, prescriptionId: z.string().uuid() });
 const requestParams = z.object({ requestId: z.string().uuid() });
 const shareParams = z.object({ shareId: z.string().uuid() });
 const shareBody = z.object({ pharmacyLicenseId: z.string().trim().min(1).max(100) }).strict();
@@ -62,6 +63,21 @@ export function createPrescriptionController(prescriptionService) {
     downloadForPatient: asyncHandler(async (req, res) => {
       const { prescriptionId: id } = prescriptionId.parse(req.params);
       const { prescription, body } = await prescriptionService.downloadForPatient(req.user.sub, id);
+      res.type(prescription.contentType || 'application/octet-stream');
+      res.attachment(prescription.originalFilename || 'prescription');
+      res.send(body);
+    }),
+    listForDoctor: asyncHandler(async (req, res) => {
+      const { patientId: id } = patientParams.parse(req.params);
+      res.json({ prescriptions: await prescriptionService.listForDoctor(req.user.sub, id) });
+    }),
+    viewForDoctor: asyncHandler(async (req, res) => {
+      const { patientId: pid, prescriptionId: id } = patientPrescriptionParams.parse(req.params);
+      res.json(await prescriptionService.viewForDoctor(req.user.sub, pid, id));
+    }),
+    downloadForDoctor: asyncHandler(async (req, res) => {
+      const { patientId: pid, prescriptionId: id } = patientPrescriptionParams.parse(req.params);
+      const { prescription, body } = await prescriptionService.downloadForDoctor(req.user.sub, pid, id);
       res.type(prescription.contentType || 'application/octet-stream');
       res.attachment(prescription.originalFilename || 'prescription');
       res.send(body);

@@ -4,31 +4,7 @@ import PortalShell from "../../../components/PortalShell";
 import TimeLeft from "../../../components/TimeLeft";
 import { EmptyState, fmtDate, fmtDateTime } from "../../../components/ui";
 import { api } from "../../../lib/api";
-import { makeTextPdf, safeFilename, saveBlob } from "../../../lib/pdf";
-
-// A typed prescription as a PDF the patient can keep.
-function savePrescriptionPdf(view) {
-  const { prescription, medications, diagnosis, notes, integrity } = view;
-  const blocks = [
-    { type: "title", text: prescription.title || "Prescription" },
-    { type: "row", label: "Prescribed by", text: prescription.doctorName || "-" },
-    { type: "row", label: "Issued", text: prescription.createdAt ? new Date(prescription.createdAt).toLocaleString() : "-" },
-    { type: "row", label: "Prescription ID", text: prescription.id },
-  ];
-  if (prescription.dispensedAt) blocks.push({ type: "row", label: "Dispensed", text: new Date(prescription.dispensedAt).toLocaleString() });
-  blocks.push({ type: "heading", text: "Medicines" });
-  (medications || []).forEach((m, i) => {
-    blocks.push({ type: "text", text: `${i + 1}. ${m.name}: ${[m.dose, m.frequency, m.duration].filter(Boolean).join(", ")}` });
-    if (m.instructions) blocks.push({ type: "muted", text: `    ${m.instructions}` });
-  });
-  if (diagnosis) blocks.push({ type: "heading", text: "Diagnosis" }, { type: "text", text: diagnosis });
-  if (notes) blocks.push({ type: "heading", text: "Advice" }, { type: "text", text: notes });
-  blocks.push(
-    { type: "heading", text: "Verification" },
-    { type: "muted", text: `${integrity?.valid ? "Verified" : "Could not be verified"}. Contents match: ${integrity?.contentHashValid ? "yes" : "no"}; doctor signature: ${integrity?.signatureValid ? "valid" : "invalid"}; on blockchain: ${integrity?.blockchainValid ? "yes" : "no"}.` }
-  );
-  saveBlob(makeTextPdf(blocks), safeFilename(prescription.title || "prescription", "pdf"));
-}
+import { PrescriptionView, savePrescriptionPdf } from "../../../components/PrescriptionView";
 
 function SharePanel({ prescription, shares, onShare, onRevoke, busy }) {
   const [pharmacyId, setPharmacyId] = useState("");
@@ -76,76 +52,6 @@ function SharePanel({ prescription, shares, onShare, onRevoke, busy }) {
           </button>
         </div>
       ))}
-    </div>
-  );
-}
-
-function PrescriptionView({ view, onDownload }) {
-  const { prescription, medications, diagnosis, notes, integrity } = view;
-  return (
-    <div>
-      <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap", marginBottom: 6 }}>
-        <h3 style={{ margin: 0, fontSize: 16 }}>{prescription.title || "Prescription"}</h3>
-        <span style={{ color: "var(--muted)", fontSize: 12.5 }}>
-          {prescription.doctorName ? `by ${prescription.doctorName} · ` : ""}
-          {fmtDateTime(prescription.createdAt)}
-        </span>
-        <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }} onClick={onDownload}>
-          {medications ? "Download PDF" : "Download"}
-        </button>
-      </div>
-      <p style={{ fontSize: 13, margin: "0 0 12px" }}>
-        <strong style={{ color: integrity.valid ? "var(--primary)" : "var(--red)" }}>{integrity.valid ? "Verified" : "Could not be verified"}</strong>
-        {" · "}contents match: {integrity.contentHashValid ? "yes" : "no"}; doctor signature: {integrity.signatureValid ? "valid" : "invalid"}; on blockchain:{" "}
-        {integrity.blockchainValid ? "yes" : "no"}
-      </p>
-      {medications ? (
-        <table>
-          <thead>
-            <tr>
-              <th>Medicine</th>
-              <th>Dose</th>
-              <th>How often</th>
-              <th>For how long</th>
-              <th>Instructions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {medications.map((m, i) => (
-              <tr key={i}>
-                <td style={{ fontWeight: 600 }}>{m.name}</td>
-                <td>{m.dose}</td>
-                <td>{m.frequency}</td>
-                <td>{m.duration}</td>
-                <td>{m.instructions || "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <p style={{ fontSize: 13.5 }}>
-          This prescription was uploaded as a file before typed prescriptions existed.{" "}
-          <button className="btn btn-ghost btn-sm" onClick={onDownload}>
-            Download
-          </button>
-        </p>
-      )}
-      {(diagnosis || notes) && (
-        <dl style={{ margin: "12px 0 0", display: "grid", gridTemplateColumns: "minmax(110px, 160px) 1fr", gap: "6px 14px", fontSize: 13.5 }}>
-          {diagnosis && (
-            <>
-              <dt style={{ color: "var(--muted)" }}>Diagnosis</dt>
-              <dd style={{ margin: 0 }}>{diagnosis}</dd>
-            </>
-          )}
-          {notes && (
-            <>
-              <dt style={{ color: "var(--muted)" }}>Advice</dt>
-              <dd style={{ margin: 0 }}>{notes}</dd>
-            </>
-          )}
-        </dl>
-      )}
     </div>
   );
 }
@@ -251,7 +157,7 @@ export default function PatientPrescriptions() {
       role="patient"
       eyebrow="Patient Portal"
       title="Prescriptions"
-      subtitle="Doctors ask you before writing each prescription. Every prescription is signed by the doctor and recorded on the blockchain."
+      subtitle="Doctors ask you before writing each prescription. You can view, download or share any of them with a pharmacy."
     >
       {error && <div className="error-text" role="alert">{error}</div>}
 
@@ -292,6 +198,7 @@ export default function PatientPrescriptions() {
           <PrescriptionView
             view={open}
             onDownload={() => download(open.prescription.id)}
+            loadFile={() => api.fetchPatientPrescriptionFile(open.prescription.id)}
           />
           <SharePanel
             prescription={prescriptions?.find((p) => p.id === open.prescription.id) || open.prescription}
@@ -332,7 +239,7 @@ export default function PatientPrescriptions() {
                       Download
                     </button>{" "}
                     <button className="btn btn-primary btn-sm" onClick={() => toggle(p.id)}>
-                      {open?.prescription.id === p.id ? "Close" : "Open"}
+                      {open?.prescription.id === p.id ? "Close" : "View"}
                     </button>
                   </td>
                 </tr>

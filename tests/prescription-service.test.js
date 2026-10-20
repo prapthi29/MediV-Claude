@@ -22,6 +22,7 @@ class Prescriptions {
     return item;
   }
   async findById(id) { return this.items.find((item) => item.id === id) ?? null; }
+  async listForPatient(patientId) { return this.items.filter((item) => item.patient_user_id === patientId); }
   async markDispensed(id, { pharmacyUserId, dispensedAt, signature, signerAddress }) {
     const item = await this.findById(id);
     if (!item || item.dispensed_at) return null;
@@ -245,6 +246,18 @@ describe('prescription service', () => {
     await expect(service.openForPharmacy('pharmacy', share.id)).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
     await expect(service.dispense('pharmacy', share.id, PASSWORD)).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
     await expect(service.shareWithPharmacy('patient', prescription.id, 'PH-002')).rejects.toMatchObject({ code: 'PRESCRIPTION_ALREADY_DISPENSED' });
+  });
+
+  it('lets a linked doctor read the patient prescriptions, and no one else', async () => {
+    const { service } = await setup();
+    const approvalId = await approved(service, 'doctor');
+    const prescription = await service.create('doctor', 'patient', { ...form, approvalId, password: PASSWORD });
+    const view = await service.viewForDoctor('other', 'patient', prescription.id);
+    expect(view.medications[0].name).toBe('Amoxicillin');
+    await expect(service.listForDoctor('other', 'patient')).resolves.toHaveLength(1);
+
+    service.consentService = { assertDoctorAccess: async () => { throw Object.assign(new Error('no consent'), { code: 'CONSENT_REQUIRED' }); } };
+    await expect(service.viewForDoctor('other', 'patient', prescription.id)).rejects.toMatchObject({ code: 'CONSENT_REQUIRED' });
   });
 
   it('closes a share as soon as the patient revokes it', async () => {

@@ -451,6 +451,22 @@ export const api = {
       (r) => r.prescriptions
     ),
 
+  fetchPatientPrescriptionFile: (prescriptionId) =>
+    fetchFile(`/patients/me/prescriptions/${prescriptionId}/download`),
+
+  // Doctor: prescriptions of a patient who has linked them.
+  getPatientPrescriptionsForDoctor: (patientId) =>
+    request(`/doctor/patients/${patientId}/prescriptions`).then((r) => r.prescriptions || []),
+
+  viewPrescriptionForDoctor: (patientId, prescriptionId) =>
+    request(`/doctor/patients/${patientId}/prescriptions/${prescriptionId}`),
+
+  fetchPrescriptionFileForDoctor: (patientId, prescriptionId) =>
+    fetchFile(`/doctor/patients/${patientId}/prescriptions/${prescriptionId}/download`),
+
+  downloadPrescriptionForDoctor: (patientId, prescriptionId, filename) =>
+    downloadFile(`/doctor/patients/${patientId}/prescriptions/${prescriptionId}/download`, filename),
+
   downloadPatientPrescription: (prescriptionId, filename) =>
     downloadFile(`/patients/me/prescriptions/${prescriptionId}/download`, filename),
 

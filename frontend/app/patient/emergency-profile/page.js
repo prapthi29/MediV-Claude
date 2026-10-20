@@ -334,25 +334,18 @@ export default function PatientEmergencyProfilePage() {
             </div>
           </section>
 
-          <Section title="Doctor's signature">
+          <Section title="Added by">
             {profile.signature?.profileSha256 ? (
               <p>
                 <strong style={{ color: profile.integrity?.verified ? "var(--primary)" : "var(--red)" }}>
                   {profile.integrity?.verified ? "Verified" : "Could not be verified"}
                 </strong>
-                {" · "}Version {profile.version}, signed by{" "}
+                {" · "}Version {profile.version}, added by{" "}
                 {displayValue(profile.signature.signedByDoctorName)} on{" "}
                 {new Date(profile.signature.signedAt).toLocaleString()}.
-                {!profile.integrity?.verified && (
-                  <>
-                    {" "}Hash matches: {profile.integrity?.hashValid ? "yes" : "no"}; signature:{" "}
-                    {profile.integrity?.signatureValid ? "yes" : "no"}; on blockchain:{" "}
-                    {profile.integrity?.onChain ? "yes" : "no"}.
-                  </>
-                )}
-              </p>
+                              </p>
             ) : (
-              <p>This profile was saved before doctor signatures were added.</p>
+              <p>This profile was added before verification was available.</p>
             )}
           </Section>
 

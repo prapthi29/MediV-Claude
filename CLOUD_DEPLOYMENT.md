@@ -69,6 +69,26 @@ Notes:
 - Create the first admin once, from the service's shell or with
   `railway run npm run create-admin -- <email> <password>`.
 
+### Restricted database login (recommended)
+
+Migration 036 adds tamper guards: deletes are refused, signed and hashed
+columns can't be changed, and writes from anywhere other than the API (for
+example the Supabase table editor) are refused. Every change is logged and
+anchored on chain, and Admin, then Data integrity, shows the daily check.
+
+The owner login (`postgres`) can still switch the guards off. To keep that
+login out of the running app, move the API to the restricted `medivault_app`
+role the migration creates. It can read, add and update rows, but it can't
+delete, empty tables or change the schema.
+
+1. In Supabase, open the SQL editor and run, with a new strong password:
+   `ALTER ROLE medivault_app WITH LOGIN PASSWORD '<new password>';`
+2. In Railway, add `MIGRATION_DATABASE_URL` with the current `DATABASE_URL`
+   value. Migrations keep using the owner login.
+3. Change `DATABASE_URL` to the same Session pooler string, with the user
+   `medivault_app.<project-ref>` and the new password.
+4. Redeploy, then run the check in Admin, then Data integrity.
+
 ## 3. Frontend on Vercel
 
 Add New, then Project, then import `prapthi29/MediV-Claude`.

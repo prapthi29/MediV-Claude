@@ -14,7 +14,7 @@ if (password.length < 12) {
   process.exit(1);
 }
 
-const database = createDatabase(loadEnv());
+const database = createDatabase(loadEnv(), { client: 'script' });
 
 try {
   const passwordHash = await bcrypt.hash(password, 12);

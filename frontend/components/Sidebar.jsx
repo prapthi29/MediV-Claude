@@ -64,6 +64,7 @@ export default function Sidebar({ role, userLabel, userEmail, open = false, onCl
       { href: "/admin/users", label: "Doctors & pharmacies", icon: ICONS.users },
       { href: "/admin/audit-log", label: "Audit log", icon: ICONS.audit },
       { href: "/admin/chain-log", label: "Chain log", icon: ICONS.chain },
+      { href: "/admin/integrity", label: "Data integrity", icon: ICONS.consents },
     ],
 
     patient: [

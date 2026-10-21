@@ -435,33 +435,4 @@ export class EmergencyProfileService {
       (await this.emergencyProfileRepository.findByPatientId(patientUserId)) ?? updated
     );
   }
-
-  async getAuditHistory(
-    doctorUserId,
-    patientUserId,
-    approvalRequestId
-  ) {
-    await this.requireActiveDoctor(doctorUserId);
-    await this.requirePatient(patientUserId);
-    await this.assertConnection(patientUserId, doctorUserId);
-
-    if (
-      !approvalRequestId ||
-      typeof this.emergencyProfileRepository
-        .listAuditForDoctor !== 'function'
-    ) {
-      throw new AppError(
-        403,
-        'Patient approval is required to view this audit history.',
-        'PROFILE_APPROVAL_REQUIRED'
-      );
-    }
-
-    // The repository consumes a separate one-time view approval.
-    return this.emergencyProfileRepository.listAuditForDoctor({
-      patientUserId,
-      doctorUserId,
-      approvalRequestId
-    });
-  }
 }

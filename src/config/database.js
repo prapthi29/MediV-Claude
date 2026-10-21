@@ -1,8 +1,11 @@
 ﻿import pg from 'pg';
 
-export function createDatabase(config) {
+// client marks where a write comes from. The database refuses changes from
+// connections that are not the API, a migration or an admin script.
+export function createDatabase(config, { client: source = 'api' } = {}) {
   const pool = new pg.Pool({
     connectionString: config.DATABASE_URL,
+    application_name: `medivault-${source}`,
     ssl: config.DATABASE_SSL === 'true'
       ? { rejectUnauthorized: false }
       : undefined
@@ -11,7 +14,9 @@ export function createDatabase(config) {
   // Times are stored with their time zone; this makes the database show and
   // compute them in India Standard Time.
   pool.on('connect', (client) => {
-    client.query("SET TIME ZONE 'Asia/Kolkata'").catch(() => {});
+    client
+      .query(`SET TIME ZONE 'Asia/Kolkata'; SET medivault.client = '${source}'`)
+      .catch(() => {});
   });
 
   return {

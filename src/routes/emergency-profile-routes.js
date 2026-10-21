@@ -39,11 +39,6 @@ export function createEmergencyProfileDoctorRouter(authService, service) {
     controller.update
   );
 
-  router.get(
-    '/patients/:patientId/emergency-profile/audit',
-    controller.audit
-  );
-
   return router;
 }
 

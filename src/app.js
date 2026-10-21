@@ -42,6 +42,7 @@ export function createApp({
   emergencyProfileAccessRequestService,
   auditRepository,
   adminService,
+  integrityService,
   signingKeyService,
   corsOrigin
 }) {
@@ -197,7 +198,7 @@ export function createApp({
   if (adminService) {
     app.use(
       '/api/v1/admin',
-      createAdminRouter(authService, adminService)
+      createAdminRouter(authService, adminService, integrityService)
     );
   }
 

@@ -40,8 +40,7 @@ function setup({ doctorStatus = 'active', existingProfile = null } = {}) {
       ...changes
     })),
 
-    listAudit: vi.fn(async () => []),
-    listAuditForDoctor: vi.fn(async () => [])
+    listAudit: vi.fn(async () => [])
   };
 
   const users = {

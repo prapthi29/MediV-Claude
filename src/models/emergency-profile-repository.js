@@ -485,45 +485,6 @@ export class EmergencyProfileRepository {
     });
   }
 
-  // Doctor audit-history access also requires a separate one-time
-  // view approval, since audit data can contain sensitive details.
-  async listAuditForDoctor({
-    patientUserId,
-    doctorUserId,
-    approvalRequestId
-  }) {
-    return this.database.transaction(async (client) => {
-      const consumed =
-        await this.emergencyProfileAccessRequestRepository?.consumeApproved(
-          client,
-          {
-            requestId: approvalRequestId,
-            patientUserId,
-            doctorUserId,
-            operation: 'view'
-          }
-        );
-
-      if (!consumed) {
-        throw approvalRequired(
-          'Patient approval to view profile audit history is required.'
-        );
-      }
-
-      const result = await client.query(
-        `SELECT id, patient_user_id, doctor_user_id, action,
-                changed_fields, change_reason, created_at,
-                version, profile_sha256, doctor_signature, signer_address
-         FROM patient_emergency_profile_audit
-         WHERE patient_user_id = $1
-         ORDER BY created_at DESC`,
-        [patientUserId]
-      );
-
-      return result.rows;
-    });
-  }
-
   async markBlockchain(patientUserId, version, { status, transactionHash = null }) {
     await this.database.query(
       `UPDATE patient_emergency_profiles

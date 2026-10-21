@@ -166,19 +166,6 @@ export function createEmergencyProfileController(service) {
       );
 
       res.json({ profile: updated });
-    }),
-
-    audit: asyncHandler(async (req, res) => {
-      const patientId = parsePatientId(req);
-      const approvalRequestId = parseApprovalRequestId(req);
-
-      const audit = await service.getAuditHistory(
-        req.user.sub,
-        patientId,
-        approvalRequestId
-      );
-
-      res.json({ audit });
     })
   };
 }

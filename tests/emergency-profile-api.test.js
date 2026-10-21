@@ -62,8 +62,7 @@ function setup({ doctorStatus = 'active' } = {}) {
     })),
 
     update: vi.fn(async () => ({})),
-    listAudit: vi.fn(async () => []),
-    listAuditForDoctor: vi.fn(async () => [])
+    listAudit: vi.fn(async () => [])
   };
 
   const consentService = {
@@ -145,7 +144,6 @@ describe('emergency profile API authorization', () => {
 
     expect(repository.create).not.toHaveBeenCalled();
     expect(repository.update).not.toHaveBeenCalled();
-    expect(repository.listAuditForDoctor).not.toHaveBeenCalled();
   });
 
   it('blocks a doctor from reading patient-only self-service endpoints', async () => {
@@ -201,7 +199,7 @@ describe('emergency profile API authorization', () => {
       .expect(400);
   });
 
-  it('requires a valid approval ID for audit history', async () => {
+  it('does not offer the profile audit history to doctors', async () => {
     const { app } = setup();
 
     await request(app)
@@ -209,6 +207,6 @@ describe('emergency profile API authorization', () => {
         `/api/v1/doctor/patients/${PATIENT_ID}/emergency-profile/audit`
       )
       .set('Authorization', `Bearer ${token('doctor', DOCTOR_ID)}`)
-      .expect(400);
+      .expect(404);
   });
 });

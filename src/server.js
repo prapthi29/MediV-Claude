@@ -38,6 +38,7 @@ import { EmergencyProfileService } from './services/emergency-profile-service.js
 import { EmergencyProfileAccessRequestService } from './services/emergency-profile-access-request-service.js';
 import { AdminService } from './services/admin-service.js';
 import { SigningKeyService } from './services/signing-key-service.js';
+import { IntegrityService } from './services/integrity-service.js';
 
 const config = loadEnv();
 const database = createDatabase(config);
@@ -193,6 +194,9 @@ const adminService = new AdminService({
   auditService
 });
 
+// Change log sealing, on-chain anchoring and the daily integrity check
+const integrityService = new IntegrityService({ database, recordRegistryClient });
+
 // Express application
 const app = createApp({
   authService,
@@ -205,6 +209,7 @@ const app = createApp({
   emergencyProfileAccessRequestService,
   auditRepository,
   adminService,
+  integrityService,
   signingKeyService,
   corsOrigin: config.CORS_ORIGIN
 });
@@ -214,9 +219,12 @@ const server = app.listen(config.PORT, () => {
   console.log(`MediVault API listening on port ${config.PORT}`);
 });
 
+const stopIntegrity = integrityService.start();
+
 // Graceful shutdown
 async function shutdown() {
   console.log('Shutting down MediVault API...');
+  stopIntegrity();
 
   server.close(async () => {
     try {

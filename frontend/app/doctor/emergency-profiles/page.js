@@ -285,7 +285,6 @@ export default function DoctorEmergencyProfiles() {
   const [form, setForm] = useState(EMPTY);
   const [reason, setReason] = useState("");
   const [password, setPassword] = useState("");
-  const [audit, setAudit] = useState([]);
   const [permissionRequests, setPermissionRequests] = useState([]);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [loadingRequests, setLoadingRequests] = useState(false);
@@ -378,7 +377,6 @@ export default function DoctorEmergencyProfiles() {
     setPatientId(id);
     setProfile(null);
     setForm(EMPTY);
-    setAudit([]);
     setReason("");
     setCreating(false);
     setActiveApproval(null);
@@ -418,11 +416,6 @@ export default function DoctorEmergencyProfiles() {
         toast.success("Basic profile opened.");
         // The view approval is used up now.
         loadRequests(patientId);
-        try {
-          setAudit((await api.getPatientEmergencyProfileAudit(patientId, approvalRequestId)) || []);
-        } catch {
-          setAudit([]);
-        }
       } else if (operation === "create") {
         setForm(EMPTY);
         setCreating(true);
@@ -597,13 +590,6 @@ export default function DoctorEmergencyProfiles() {
           (p.patientUserId || p.id) === patientId ? { ...p, hasBasicProfile: true } : p
         )
       );
-
-      try {
-        // A separate approved view permission is needed for protected audit access.
-        setAudit([]);
-      } catch {
-        setAudit([]);
-      }
 
       await loadRequests(patientId);
     } catch (err) {
@@ -1060,68 +1046,6 @@ export default function DoctorEmergencyProfiles() {
         </>
       )}
 
-      {profile && (
-        <section className="card card-pad">
-          <h3 style={{ marginTop: 0 }}>Audit history</h3>
-          <p style={{ color: "var(--muted)" }}>
-            Audit details are available only when authorized by the backend.
-            Use a valid approved permission if the audit endpoint requires one.
-          </p>
-
-          {!audit.length && (
-            <p style={{ color: "var(--muted)" }}>
-              No audit entries available, or the history could not be loaded.
-            </p>
-          )}
-
-          {audit.length > 0 && (
-            <div style={{ overflowX: "auto" }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Action</th>
-                    <th>Reason</th>
-                    <th>Changes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {audit.map((entry, index) => (
-                    <tr
-                      key={
-                        entry.id ||
-                        `${entry.createdAt || entry.created_at}-${index}`
-                      }
-                    >
-                      <td>
-                        {fmtDate(
-                          entry.createdAt ||
-                            entry.created_at ||
-                            entry.at
-                        )}
-                      </td>
-                      <td>
-                        {entry.action ||
-                          entry.eventType ||
-                          entry.event_type ||
-                          "Profile update"}
-                      </td>
-                      <td>{entry.reason || "—"}</td>
-                      <td>
-                        {entry.newValues || entry.new_values
-                          ? JSON.stringify(
-                              entry.newValues || entry.new_values
-                            )
-                          : "Details recorded"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
     </PortalShell>
   );
 }

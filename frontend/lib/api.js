@@ -559,11 +559,6 @@ export const api = {
       body: { ...changes, approvalRequestId, reason, password },
     }).then((r) => r.profile),
 
-  getPatientEmergencyProfileAudit: (patientId, approvalRequestId) =>
-    request(
-      `/doctor/patients/${patientId}/emergency-profile/audit?approvalRequestId=${encodeURIComponent(approvalRequestId)}`
-    ).then((r) => r.audit),
-
   // ---------- emergency access ----------
 
   // Glass-break: the doctor's password signs the request; access opens once it verifies.
@@ -613,6 +608,11 @@ export const api = {
     request("/admin/users").then((r) =>
       (r.users || []).map(normalizeUser)
     ),
+
+  getIntegrityStatus: () => request("/admin/integrity"),
+
+  runIntegrityCheck: () =>
+    request("/admin/integrity/run", { method: "POST" }).then((r) => r.check),
 
   getAuditLog: () =>
     request("/admin/audit-events").then((r) =>

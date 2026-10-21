@@ -194,6 +194,16 @@ export class RecordRegistryClient {
     );
   }
 
+  // Anchors a digest (such as the head of the database change log) as a
+  // record registered to the platform's own address.
+  async anchorDigest({ anchorId, sha256 }) {
+    return this.registerRecord({
+      recordId: anchorId,
+      contentSha256: sha256,
+      patientAddress: await this.signer.getAddress(),
+    });
+  }
+
   async getRecordVersionCount({ recordId }) {
     const blockchainRecordId = this.deriveRecordId(recordId);
     const count = await this.contract.versionCount(blockchainRecordId);

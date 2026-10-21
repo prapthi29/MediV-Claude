@@ -10,6 +10,7 @@ export class MockRecordRegistryClient {
     this.grants = new Map(); // `${patientAddress}:${doctorAddress}` -> expiresAt
     this.records = new Map(); // recordId -> record registration details
     this.prescriptions = new Map(); // prescriptionId -> prescription details
+    this.isMock = true; // state is lost on restart, so old anchors can't be verified
 
     console.log('🔷 Mock Blockchain Client initialized');
   }
@@ -70,6 +71,14 @@ export class MockRecordRegistryClient {
       patient: record.patientAddress,
       registeredAt: new Date(record.timestamp)
     };
+  }
+
+  async anchorDigest({ anchorId, sha256 }) {
+    return this.registerRecord({
+      recordId: anchorId,
+      contentSha256: sha256,
+      patientAddress: 'medivault-platform'
+    });
   }
 
   async getRecordVersionCount({ recordId }) {

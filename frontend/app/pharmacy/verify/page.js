@@ -14,7 +14,9 @@ export default function SharedPrescriptions() {
   const [browserCheck, setBrowserCheck] = useState(null);
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  // How many of each medicine are being handed over now, and any problem with each.
+  // The pharmacy's own count: the total of each medicine (set on the first
+  // visit), how many are being handed over now, and any problem with each.
+  const [totals, setTotals] = useState([]);
   const [giving, setGiving] = useState([]);
   const [givingErrors, setGivingErrors] = useState({});
   const [busy, setBusy] = useState(false);
@@ -42,6 +44,7 @@ export default function SharedPrescriptions() {
       setOpen(view);
       setPasswordError("");
       setGiving(view.medications.map(() => ""));
+      setTotals(view.dispensing.medicines.map((m) => (m.total ? String(m.total) : "")));
       setGivingErrors({});
       setBrowserCheck(await verifyPrescriptionInBrowser(view.medications, view.proof));
     } catch (err) {
@@ -55,9 +58,14 @@ export default function SharedPrescriptions() {
     e.preventDefault();
     const counts = open.dispensing?.medicines || [];
     const quantities = giving.map((q) => Number(q || 0));
+    const totalNumbers = totals.map((t) => Number(t || 0));
     const errs = {};
+    totalNumbers.forEach((t, i) => {
+      if (t < 1) errs[`total-${i}`] = "Enter the total.";
+    });
     quantities.forEach((q, i) => {
-      if (counts[i]?.left != null && q > counts[i].left) errs[i] = `Only ${counts[i].left} left to give.`;
+      const left = totalNumbers[i] - (counts[i]?.given || 0);
+      if (totalNumbers[i] >= 1 && q > left) errs[i] = `Only ${left} left to give.`;
     });
     if (!quantities.some((q) => q > 0)) errs[0] = errs[0] || "Enter how many you are giving.";
     setGivingErrors(errs);
@@ -66,7 +74,7 @@ export default function SharedPrescriptions() {
     setBusy(true);
     setError("");
     try {
-      const result = await api.dispensePrescription(open.share.id, password, quantities);
+      const result = await api.dispensePrescription(open.share.id, password, { totals: totalNumbers, quantities });
       setPassword("");
       if (result.complete) {
         // Once everything is given, this pharmacy can no longer open the prescription.
@@ -76,6 +84,7 @@ export default function SharedPrescriptions() {
       } else {
         setOpen((current) => ({ ...current, dispensing: result.dispensing }));
         setGiving(open.medications.map(() => ""));
+        setTotals(result.dispensing.medicines.map((m) => (m.total ? String(m.total) : "")));
         toast.success("Saved. The rest can be given later while the patient's share is open.");
       }
       load();
@@ -187,9 +196,30 @@ export default function SharedPrescriptions() {
                     <td>{m.frequency}</td>
                     <td>{m.duration}</td>
                     <td>{m.instructions || "—"}</td>
-                    <td>{m.quantity ?? "—"}</td>
+                    <td style={{ minWidth: 100 }}>
+                      {count?.total || !canGive ? (
+                        count?.total ?? "—"
+                      ) : (
+                        <>
+                          <input
+                            aria-label={`Total ${m.name} to give`}
+                            inputMode="numeric"
+                            maxLength={5}
+                            value={totals[i] ?? ""}
+                            placeholder="e.g. 15"
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/\D/g, "");
+                              setTotals((list) => list.map((t, j) => (j === i ? value : t)));
+                              setGivingErrors({});
+                            }}
+                            style={{ width: 80 }}
+                          />
+                          <FieldError message={givingErrors[`total-${i}`]} />
+                        </>
+                      )}
+                    </td>
                     <td>{count?.given ?? 0}</td>
-                    <td>{count?.left ?? "—"}</td>
+                    <td>{totals[i] ? Math.max(0, Number(totals[i]) - (count?.given || 0)) : "—"}</td>
                     {canGive && (
                       <td style={{ minWidth: 110 }}>
                         <input

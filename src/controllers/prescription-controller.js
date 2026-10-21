@@ -8,8 +8,7 @@ const medication = z.object({
   dose: text(100),
   frequency: text(100),
   duration: text(100),
-  instructions: z.string().trim().max(500).optional(),
-  quantity: z.number().int().min(1).max(10000).optional()
+  instructions: z.string().trim().max(500).optional()
 }).strict();
 const createBody = z.object({
   patientId,
@@ -33,6 +32,9 @@ const shareParams = z.object({ shareId: z.string().uuid() });
 const shareBody = z.object({ pharmacyLicenseId: z.string().trim().min(1).max(100) }).strict();
 const dispenseBody = z.object({
   password: z.string().min(1).max(128),
+  // The pharmacy's own count: the total it will hand over for each medicine,
+  // and how many it is giving now.
+  totals: z.array(z.number().int().min(0).max(10000)).min(1).max(20),
   quantities: z.array(z.number().int().min(0).max(10000)).min(1).max(20)
 }).strict();
 const pharmacyParams = z.object({ licenseId: z.string().trim().min(1).max(100) });
@@ -126,8 +128,8 @@ export function createPrescriptionController(prescriptionService) {
     }),
     dispense: asyncHandler(async (req, res) => {
       const { shareId } = shareParams.parse(req.params);
-      const { password, quantities } = dispenseBody.parse(req.body);
-      res.json({ dispensed: await prescriptionService.dispense(req.user.sub, shareId, password, quantities) });
+      const { password, totals, quantities } = dispenseBody.parse(req.body);
+      res.json({ dispensed: await prescriptionService.dispense(req.user.sub, shareId, password, { totals, quantities }) });
     })
   };
 }

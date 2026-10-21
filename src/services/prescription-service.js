@@ -150,7 +150,6 @@ export class PrescriptionService {
       followUp: opened.document?.followUp ?? null,
       followUpDate: opened.document?.followUpDate ?? null,
       notes: opened.document?.notes ?? null,
-      dispensing: await this.dispensingFor(prescription, opened.document?.medications),
       integrity: opened.integrity
     };
   }
@@ -194,7 +193,7 @@ export class PrescriptionService {
     if (!used) {
       throw new AppError(403, 'The patient has to approve before you can view this prescription.', 'PRESCRIPTION_VIEW_APPROVAL_REQUIRED');
     }
-    const { dispensing, ...view } = await this.viewForPatient(patientUserId, prescriptionId);
+    const view = await this.viewForPatient(patientUserId, prescriptionId);
     // An uploaded prescription comes with its file, to show once on screen.
     if (prescription.format !== 'form') {
       const stored = await this.medicalStorage.get({ key: prescription.storage_key });
@@ -216,18 +215,18 @@ export class PrescriptionService {
     return request;
   }
 
-  // How much of each medicine has been handed over so far.
+  // The pharmacy's own count of each medicine: the total it set on its first
+  // visit, how many have been given, and how many are left. Only pharmacies
+  // see this; it is not part of the doctor's prescription.
   async dispensingFor(prescription, medications) {
     const visits = (await this.prescriptionDispenseRepository?.listForPrescription(prescription.id)) ?? [];
-    const given = (medications ?? []).map((_, i) => visits.reduce((sum, v) => sum + (Number(v.quantities?.[i]) || 0), 0));
     return {
       visits: visits.map((v) => ({ at: v.created_at, quantities: v.quantities })),
-      medicines: (medications ?? []).map((m, i) => ({
-        name: m.name,
-        total: m.quantity ?? null,
-        given: given[i],
-        left: m.quantity ? Math.max(0, m.quantity - given[i]) : null
-      }))
+      medicines: (medications ?? []).map((m, i) => {
+        const total = visits.map((v) => Number(v.totals?.[i]) || 0).find((t) => t > 0) ?? null;
+        const given = visits.reduce((sum, v) => sum + (Number(v.quantities?.[i]) || 0), 0);
+        return { name: m.name, total, given, left: total === null ? null : Math.max(0, total - given) };
+      })
     };
   }
 
@@ -375,7 +374,7 @@ export class PrescriptionService {
   // The pharmacy records how many of each medicine it gave and signs that
   // with its own key. A prescription can be handed over in parts; once every
   // medicine is fully given it is dispensed and no pharmacy can open it again.
-  async dispense(pharmacyUserId, shareId, password, quantities) {
+  async dispense(pharmacyUserId, shareId, password, { totals, quantities } = {}) {
     const { prescription } = await this.requireShare(pharmacyUserId, shareId);
     if (prescription.dispensed_at) {
       throw new AppError(409, 'This prescription has already been dispensed.', 'PRESCRIPTION_ALREADY_DISPENSED');
@@ -387,7 +386,8 @@ export class PrescriptionService {
 
     const medications = document?.medications ?? [];
     const before = await this.dispensingFor(prescription, medications);
-    const given = this.checkQuantities(quantities, before.medicines);
+    const counted = this.checkCounts(totals, quantities, before.medicines);
+    const given = counted.given;
 
     const dispensedAt = new Date();
     const digest = crypto.createHash('sha256').update(stableStringify({
@@ -395,19 +395,17 @@ export class PrescriptionService {
       prescriptionId: prescription.id,
       prescriptionSha256: prescription.content_sha256,
       pharmacyUserId,
+      totals: counted.totals,
       quantities: given,
       dispensedAt: dispensedAt.toISOString()
     }), 'utf8').digest('hex');
     const { signature, signerAddress } = await this.signingKeyService.signDigest(pharmacyUserId, password, digest);
 
     await this.prescriptionDispenseRepository.create({
-      prescriptionId: prescription.id, pharmacyUserId, quantities: given, dispenseSha256: digest, signature, signerAddress, createdAt: dispensedAt
+      prescriptionId: prescription.id, pharmacyUserId, totals: counted.totals, quantities: given, dispenseSha256: digest, signature, signerAddress, createdAt: dispensedAt
     });
 
-    // A medicine without a total counts as given once any amount is handed over.
-    const complete = before.medicines.every((m, i) =>
-      m.total ? m.given + given[i] >= m.total : m.given + given[i] > 0
-    );
+    const complete = before.medicines.every((m, i) => m.given + given[i] >= counted.totals[i]);
     let finishedAt = null;
     if (complete) {
       const updated = await this.prescriptionRepository.markDispensed(prescription.id, { pharmacyUserId, dispensedAt, signature, signerAddress });
@@ -432,24 +430,31 @@ export class PrescriptionService {
     };
   }
 
-  // quantities[i] is how many of medicine i are handed over now.
-  checkQuantities(quantities, medicines) {
-    if (!Array.isArray(quantities) || quantities.length !== medicines.length) {
-      throw new AppError(400, 'Enter how many of each medicine you are giving.', 'QUANTITIES_REQUIRED');
+  // totals[i] is the pharmacy's total for medicine i, set on the first visit
+  // and kept after that; quantities[i] is how many are handed over now.
+  checkCounts(totals, quantities, medicines) {
+    if (!Array.isArray(quantities) || quantities.length !== medicines.length ||
+        !Array.isArray(totals) || totals.length !== medicines.length) {
+      throw new AppError(400, 'Enter the total and how many you are giving for each medicine.', 'QUANTITIES_REQUIRED');
     }
     const given = quantities.map((q) => Number(q));
+    const fixed = medicines.map((m, i) => m.total ?? Number(totals[i]));
     medicines.forEach((m, i) => {
+      if (!Number.isInteger(fixed[i]) || fixed[i] < 1) {
+        throw new AppError(400, `Enter the total number of ${m.name} to give.`, 'TOTAL_REQUIRED');
+      }
       if (!Number.isInteger(given[i]) || given[i] < 0) {
         throw new AppError(400, `Enter a whole number for ${m.name}.`, 'INVALID_QUANTITY');
       }
-      if (m.left !== null && given[i] > m.left) {
-        throw new AppError(400, `Only ${m.left} of ${m.name} ${m.left === 1 ? 'is' : 'are'} left to give.`, 'QUANTITY_TOO_HIGH');
+      const left = fixed[i] - m.given;
+      if (given[i] > left) {
+        throw new AppError(400, `Only ${left} of ${m.name} ${left === 1 ? 'is' : 'are'} left to give.`, 'QUANTITY_TOO_HIGH');
       }
     });
     if (!given.some((q) => q > 0)) {
       throw new AppError(400, 'Enter how many you are giving for at least one medicine.', 'QUANTITIES_REQUIRED');
     }
-    return given;
+    return { totals: fixed, given };
   }
 
   // Lets the patient check a pharmacy ID before sharing prescriptions with it.

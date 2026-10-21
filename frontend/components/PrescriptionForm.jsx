@@ -8,13 +8,12 @@ import { api } from "../lib/api";
 import { FieldError, scrollToField } from "./FieldError";
 import { toast } from "./Toast";
 
-const EMPTY_MED = { name: "", dose: "", frequency: "", duration: "", quantity: "", instructions: "" };
+const EMPTY_MED = { name: "", dose: "", frequency: "", duration: "", instructions: "" };
 const MED_FIELDS = [
   { id: "name", label: "Medicine", placeholder: "e.g. Amoxicillin" },
   { id: "dose", label: "Dose", placeholder: "500 mg" },
   { id: "frequency", label: "How often", placeholder: "Three times a day" },
   { id: "duration", label: "For how long", placeholder: "5 days" },
-  { id: "quantity", label: "Total to give", placeholder: "e.g. 15", numeric: true },
   { id: "instructions", label: "Instructions (optional)", placeholder: "After food" },
 ];
 const EMPTY = { title: "", diagnosis: "", symptoms: "", notes: "", followUp: "", followUpDate: "" };
@@ -99,7 +98,7 @@ export default function PrescriptionForm({ patientId, patient }) {
     if (!filled.some(Boolean)) errs["med-0-name"] = "Add at least one medicine.";
     medications.forEach((m, i) => {
       if (!filled[i]) return;
-      for (const f of ["name", "dose", "frequency", "duration", "quantity"]) {
+      for (const f of ["name", "dose", "frequency", "duration"]) {
         if (!m[f].trim()) errs[`med-${i}-${f}`] = "Required";
       }
     });
@@ -114,7 +113,7 @@ export default function PrescriptionForm({ patientId, patient }) {
         patientId,
         approvalId: approval.id,
         title: fields.title.trim(),
-        medications: meds.map((m) => ({ ...m, quantity: Number(m.quantity), instructions: m.instructions.trim() || undefined })),
+        medications: meds.map((m) => ({ ...m, instructions: m.instructions.trim() || undefined })),
         diagnosis: fields.diagnosis.trim(),
         symptoms: fields.symptoms.trim(),
         notes: fields.notes.trim(),
@@ -179,9 +178,6 @@ export default function PrescriptionForm({ patientId, patient }) {
           </div>
 
           <label style={{ fontSize: 12.5, fontWeight: 600 }}>Medicines</label>
-          <div className="field-hint" style={{ marginTop: 2 }}>
-            “Total to give” is the number of tablets, capsules or bottles. The pharmacy uses it to track what it has given and what is left.
-          </div>
           {medications.map((med, index) => (
             <div key={index} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, alignItems: "start", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
               {MED_FIELDS.map((f) => (
@@ -194,9 +190,8 @@ export default function PrescriptionForm({ patientId, patient }) {
                     data-field={`med-${index}-${f.id}`}
                     value={med[f.id]}
                     placeholder={f.placeholder}
-                    inputMode={f.numeric ? "numeric" : undefined}
-                    maxLength={f.numeric ? 5 : f.id === "instructions" ? 500 : 200}
-                    onChange={(e) => updateMed(index, f.id, f.numeric ? e.target.value.replace(/\D/g, "").replace(/^0+/, "") : e.target.value)}
+                    maxLength={f.id === "instructions" ? 500 : 200}
+                    onChange={(e) => updateMed(index, f.id, e.target.value)}
                   />
                   <FieldError message={fieldErrors[`med-${index}-${f.id}`]} />
                 </div>

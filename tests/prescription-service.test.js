@@ -119,7 +119,7 @@ class ViewRequests {
 class Dispenses {
   constructor() { this.items = []; }
   async create(input) {
-    const item = { id: crypto.randomUUID(), prescription_id: input.prescriptionId, pharmacy_user_id: input.pharmacyUserId, quantities: input.quantities, created_at: input.createdAt };
+    const item = { id: crypto.randomUUID(), prescription_id: input.prescriptionId, pharmacy_user_id: input.pharmacyUserId, totals: input.totals, quantities: input.quantities, created_at: input.createdAt };
     this.items.push(item);
     return item;
   }
@@ -278,12 +278,12 @@ describe('prescription service', () => {
     const prescription = await service.create('doctor', 'patient', { ...form, approvalId, password: PASSWORD });
     const share = await service.shareWithPharmacy('patient', prescription.id, 'PH-001');
 
-    await expect(service.dispense('pharmacy', share.id, 'Wrong#Pass1234', [1])).rejects.toMatchObject({ code: 'INVALID_SIGNING_PASSWORD' });
-    await expect(service.dispense('pharmacy', share.id, PASSWORD, [0])).rejects.toMatchObject({ code: 'QUANTITIES_REQUIRED' });
-    await expect(service.dispense('pharmacy', share.id, PASSWORD, [1])).resolves.toMatchObject({ prescriptionId: prescription.id, complete: true });
+    await expect(service.dispense('pharmacy', share.id, 'Wrong#Pass1234', { totals: [1], quantities: [1] })).rejects.toMatchObject({ code: 'INVALID_SIGNING_PASSWORD' });
+    await expect(service.dispense('pharmacy', share.id, PASSWORD, { totals: [1], quantities: [0] })).rejects.toMatchObject({ code: 'QUANTITIES_REQUIRED' });
+    await expect(service.dispense('pharmacy', share.id, PASSWORD, { totals: [1], quantities: [1] })).resolves.toMatchObject({ prescriptionId: prescription.id, complete: true });
     // Dispensing ends the pharmacy's access to the prescription.
     await expect(service.openForPharmacy('pharmacy', share.id)).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
-    await expect(service.dispense('pharmacy', share.id, PASSWORD, [1])).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
+    await expect(service.dispense('pharmacy', share.id, PASSWORD, { totals: [1], quantities: [1] })).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
     await expect(service.shareWithPharmacy('patient', prescription.id, 'PH-002')).rejects.toMatchObject({ code: 'PRESCRIPTION_ALREADY_DISPENSED' });
   });
 
@@ -299,17 +299,19 @@ describe('prescription service', () => {
   it('tracks how many of each medicine are given, and closes once all are given', async () => {
     const { service } = await setup();
     const approvalId = await approved(service, 'doctor');
-    const medications = [{ ...form.medications[0], quantity: 15 }];
-    const prescription = await service.create('doctor', 'patient', { ...form, medications, approvalId, password: PASSWORD });
+    const prescription = await service.create('doctor', 'patient', { ...form, approvalId, password: PASSWORD });
     const share = await service.shareWithPharmacy('patient', prescription.id, 'PH-001');
 
-    await expect(service.dispense('pharmacy', share.id, PASSWORD, [16])).rejects.toMatchObject({ code: 'QUANTITY_TOO_HIGH' });
-    const first = await service.dispense('pharmacy', share.id, PASSWORD, [10]);
+    await expect(service.dispense('pharmacy', share.id, PASSWORD, { totals: [0], quantities: [5] })).rejects.toMatchObject({ code: 'TOTAL_REQUIRED' });
+    await expect(service.dispense('pharmacy', share.id, PASSWORD, { totals: [15], quantities: [16] })).rejects.toMatchObject({ code: 'QUANTITY_TOO_HIGH' });
+    const first = await service.dispense('pharmacy', share.id, PASSWORD, { totals: [15], quantities: [10] });
     expect(first).toMatchObject({ complete: false });
     expect(first.dispensing.medicines[0]).toMatchObject({ total: 15, given: 10, left: 5 });
     // A part-given prescription stays open to the pharmacy.
     await expect(service.openForPharmacy('pharmacy', share.id)).resolves.toMatchObject({ dispensed: null });
-    await expect(service.dispense('pharmacy', share.id, PASSWORD, [5])).resolves.toMatchObject({ complete: true });
+    // The total stays as first set, whatever a later visit sends.
+    await expect(service.dispense('pharmacy', share.id, PASSWORD, { totals: [99], quantities: [6] })).rejects.toMatchObject({ code: 'QUANTITY_TOO_HIGH' });
+    await expect(service.dispense('pharmacy', share.id, PASSWORD, { totals: [15], quantities: [5] })).resolves.toMatchObject({ complete: true });
     await expect(service.openForPharmacy('pharmacy', share.id)).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
   });
 

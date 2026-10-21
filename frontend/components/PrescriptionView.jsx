@@ -19,7 +19,7 @@ export function savePrescriptionPdf(view) {
   if (symptoms) blocks.push({ type: "heading", text: "Symptoms" }, { type: "text", text: symptoms });
   blocks.push({ type: "heading", text: "Medicines" });
   (medications || []).forEach((m, i) => {
-    blocks.push({ type: "text", text: `${i + 1}. ${m.name}: ${[m.dose, m.frequency, m.duration, m.quantity && `total ${m.quantity}`].filter(Boolean).join(", ")}` });
+    blocks.push({ type: "text", text: `${i + 1}. ${m.name}: ${[m.dose, m.frequency, m.duration].filter(Boolean).join(", ")}` });
     if (m.instructions) blocks.push({ type: "muted", text: `    ${m.instructions}` });
   });
   if (notes) blocks.push({ type: "heading", text: "Advice" }, { type: "text", text: notes });
@@ -34,9 +34,7 @@ export function savePrescriptionPdf(view) {
 }
 
 export function PrescriptionView({ view, onDownload, loadFile }) {
-  const { prescription, medications, diagnosis, symptoms, notes, followUp, followUpDate, integrity, dispensing } = view;
-  const counts = dispensing?.medicines;
-  const showCounts = Boolean(counts?.some((c) => c.total || c.given));
+  const { prescription, medications, diagnosis, symptoms, notes, followUp, followUpDate, integrity } = view;
   return (
     <div>
       <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap", marginBottom: 6 }}>
@@ -63,9 +61,7 @@ export function PrescriptionView({ view, onDownload, loadFile }) {
               <th>Dose</th>
               <th>How often</th>
               <th>For how long</th>
-              <th>Total</th>
               <th>Instructions</th>
-              {showCounts && <th>Given / left</th>}
             </tr>
           </thead>
           <tbody>
@@ -75,14 +71,7 @@ export function PrescriptionView({ view, onDownload, loadFile }) {
                 <td>{m.dose}</td>
                 <td>{m.frequency}</td>
                 <td>{m.duration}</td>
-                <td>{m.quantity || "—"}</td>
                 <td>{m.instructions || "—"}</td>
-                {showCounts && (
-                  <td>
-                    {counts[i]?.given ?? 0}
-                    {counts[i]?.left != null ? ` / ${counts[i].left} left` : ""}
-                  </td>
-                )}
               </tr>
             ))}
           </tbody>

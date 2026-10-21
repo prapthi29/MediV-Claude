@@ -3,12 +3,14 @@
 ALTER TABLE prescriptions
     ADD COLUMN IF NOT EXISTS follow_up_date DATE;
 
--- Each time a pharmacy hands over medicines, how many of each it gave.
--- A prescription is fully dispensed once every medicine's total is given.
+-- The pharmacy's own count. On its first visit it sets the total of each
+-- medicine to hand over; each visit records how many of each it gave.
+-- A prescription is fully dispensed once every total is given.
 CREATE TABLE IF NOT EXISTS prescription_dispenses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     prescription_id UUID NOT NULL REFERENCES prescriptions(id) ON DELETE CASCADE,
     pharmacy_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    totals JSONB NOT NULL,
     quantities JSONB NOT NULL,
     dispense_sha256 CHAR(64) NOT NULL,
     signature TEXT NOT NULL,

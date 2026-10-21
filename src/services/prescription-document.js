@@ -12,20 +12,14 @@ function sha256Hex(text) {
 
 export const PRESCRIPTION_CONTENT_TYPE = 'application/vnd.medivault.prescription+json';
 
-// quantity is the total to hand over (for example 15 tablets or 1 bottle).
-// It is left out when not given, so older prescriptions keep their hash.
 export function normaliseMedications(medications) {
-  return medications.map((m) => {
-    const med = {
-      name: m.name.trim(),
-      dose: m.dose.trim(),
-      frequency: m.frequency.trim(),
-      duration: m.duration.trim(),
-      instructions: m.instructions?.trim() || null
-    };
-    if (Number.isInteger(m.quantity) && m.quantity > 0) med.quantity = m.quantity;
-    return med;
-  });
+  return medications.map((m) => ({
+    name: m.name.trim(),
+    dose: m.dose.trim(),
+    frequency: m.frequency.trim(),
+    duration: m.duration.trim(),
+    instructions: m.instructions?.trim() || null
+  }));
 }
 
 export function medicationsSha256(medications) {

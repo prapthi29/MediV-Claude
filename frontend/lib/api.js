@@ -447,11 +447,12 @@ export const api = {
 
   openSharedPrescription: (shareId) => request(`/pharmacy/shares/${shareId}`),
 
-  // quantities[i] is how many of medicine i the pharmacy is handing over now.
-  dispensePrescription: (shareId, password, quantities) =>
+  // totals[i] is the pharmacy's total for medicine i; quantities[i] is how
+  // many it is handing over now.
+  dispensePrescription: (shareId, password, { totals, quantities }) =>
     request(`/pharmacy/shares/${shareId}/dispense`, {
       method: "POST",
-      body: { password, quantities },
+      body: { password, totals, quantities },
     }).then((r) => r.dispensed),
 
   getPatientPrescriptions: () =>

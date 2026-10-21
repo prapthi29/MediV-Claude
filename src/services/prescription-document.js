@@ -12,14 +12,20 @@ function sha256Hex(text) {
 
 export const PRESCRIPTION_CONTENT_TYPE = 'application/vnd.medivault.prescription+json';
 
+// quantity is the total to hand over (for example 15 tablets or 1 bottle).
+// It is left out when not given, so older prescriptions keep their hash.
 export function normaliseMedications(medications) {
-  return medications.map((m) => ({
-    name: m.name.trim(),
-    dose: m.dose.trim(),
-    frequency: m.frequency.trim(),
-    duration: m.duration.trim(),
-    instructions: m.instructions?.trim() || null
-  }));
+  return medications.map((m) => {
+    const med = {
+      name: m.name.trim(),
+      dose: m.dose.trim(),
+      frequency: m.frequency.trim(),
+      duration: m.duration.trim(),
+      instructions: m.instructions?.trim() || null
+    };
+    if (Number.isInteger(m.quantity) && m.quantity > 0) med.quantity = m.quantity;
+    return med;
+  });
 }
 
 export function medicationsSha256(medications) {
@@ -28,10 +34,11 @@ export function medicationsSha256(medications) {
 
 // Symptoms and follow-up are hashed only when present, so prescriptions
 // written before they existed keep the same hash.
-export function clinicalSha256({ diagnosis = null, notes = null, symptoms = null, followUp = null }) {
+export function clinicalSha256({ diagnosis = null, notes = null, symptoms = null, followUp = null, followUpDate = null }) {
   const clinical = { diagnosis: diagnosis || null, notes: notes || null };
   if (symptoms) clinical.symptoms = symptoms;
   if (followUp) clinical.followUp = followUp;
+  if (followUpDate) clinical.followUpDate = followUpDate;
   return sha256Hex(stableStringify(clinical));
 }
 
@@ -47,11 +54,12 @@ export function prescriptionRootSha256({ patientUserId, medicationsHash, clinica
 }
 
 // Builds the stored document and every hash for a new prescription.
-export function buildPrescription({ patientUserId, medications, diagnosis, notes, symptoms, followUp }) {
+export function buildPrescription({ patientUserId, medications, diagnosis, notes, symptoms, followUp, followUpDate }) {
   const meds = normaliseMedications(medications);
   const clinical = { diagnosis: diagnosis?.trim() || null, notes: notes?.trim() || null };
   if (symptoms?.trim()) clinical.symptoms = symptoms.trim();
   if (followUp?.trim()) clinical.followUp = followUp.trim();
+  if (followUpDate) clinical.followUpDate = followUpDate;
   const medicationsHash = medicationsSha256(meds);
   const clinicalHash = clinicalSha256(clinical);
   const document = { medications: meds, ...clinical };

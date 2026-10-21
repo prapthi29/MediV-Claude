@@ -726,3 +726,19 @@ textarea.input, .field textarea { resize: vertical; line-height: 1.5; }
   }
 }
 
+/* Toast messages */
+.toaster { position: fixed; right: 20px; bottom: 20px; z-index: 60; display: flex; flex-direction: column; gap: 8px; max-width: min(380px, calc(100vw - 32px)); }
+.toast { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 10px; font-size: 13.5px; font-weight: 500; box-shadow: 0 8px 24px rgba(15, 40, 35, 0.16); background: var(--surface, #fff); border: 1px solid var(--border); border-left: 4px solid var(--primary); color: var(--ink); animation: toast-in 0.18s ease-out; }
+.toast-error { border-left-color: var(--red); }
+.toast span { flex: 1; }
+.toast button { background: none; border: 0; font-size: 18px; line-height: 1; color: var(--muted); cursor: pointer; padding: 0 2px; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (max-width: 640px) { .toaster { left: 16px; right: 16px; bottom: 16px; max-width: none; } }
+/* A short result shown right next to the button that caused it */
+.inline-note { font-size: 13px; margin-top: 8px; color: var(--primary-dark, var(--primary)); font-weight: 500; }
+.phone-input { display: flex; gap: 8px; margin-top: 5px; }
+.phone-input select { flex: 0 0 auto; width: auto; max-width: 46%; }
+.phone-input input { flex: 1; min-width: 0; }
+.followup-reminder { display: flex; flex-direction: column; gap: 4px; margin-bottom: 18px; padding: 12px 14px; border-radius: 10px; background: var(--primary-tint); border: 1px solid var(--border); border-left: 4px solid var(--primary); font-size: 13.5px; color: var(--ink); }
+.nav-group-label { display: flex; align-items: center; gap: 10px; padding: 9px 12px 4px; font-size: 13.5px; font-weight: 600; color: var(--muted); }
+.nav-sublink { padding-left: 38px; }

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import PortalShell from "../../../components/PortalShell";
 import TimeLeft from "../../../components/TimeLeft";
+import PharmacyLinks from "../../../components/PharmacyLinks";
 import { EmptyState, fmtDateTime } from "../../../components/ui";
 import { api } from "../../../lib/api";
 
@@ -57,7 +58,7 @@ export default function ConsentWallet() {
       role="patient"
       eyebrow="Patient Portal"
       title="Consent wallet"
-      subtitle="Linking a doctor gives them 30 minutes of access. You can revoke it sooner, and they need a new link after it ends."
+      subtitle="Link a doctor or a pharmacy. Each link lasts 30 minutes, and you can end it sooner."
     >
       <div className="card card-pad" style={{ marginBottom: 20 }}>
         <h3 style={{ fontSize: 15, margin: "0 0 4px" }}>Grant access to a doctor</h3>
@@ -106,6 +107,10 @@ export default function ConsentWallet() {
             </tbody>
           </table>
         )}
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        <PharmacyLinks />
       </div>
     </PortalShell>
   );

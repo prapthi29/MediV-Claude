@@ -13,6 +13,8 @@ import { ConsentRepository } from './models/consent-repository.js';
 import { PrescriptionRepository } from './models/prescription-repository.js';
 import { PrescriptionApprovalRepository } from './models/prescription-approval-repository.js';
 import { PrescriptionShareRepository } from './models/prescription-share-repository.js';
+import { PrescriptionViewRequestRepository } from './models/prescription-view-request-repository.js';
+import { PrescriptionDispenseRepository } from './models/prescription-dispense-repository.js';
 import { AuditRepository } from './models/audit-repository.js';
 import { EmergencyAccessRepository } from './models/emergency-access-repository.js';
 import { EmergencyProfileRepository } from './models/emergency-profile-repository.js';
@@ -140,6 +142,8 @@ const prescriptionService = new PrescriptionService({
   prescriptionRepository: new PrescriptionRepository(database),
   prescriptionApprovalRepository: new PrescriptionApprovalRepository(database),
   prescriptionShareRepository: new PrescriptionShareRepository(database),
+  prescriptionViewRequestRepository: new PrescriptionViewRequestRepository(database),
+  prescriptionDispenseRepository: new PrescriptionDispenseRepository(database),
   medicalStorage: createMedicalStorage(config),
   fileEncryptionService,
   userRepository,

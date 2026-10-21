@@ -45,7 +45,8 @@ const diagnosisForm = z.object({
   findings: formText,
   treatmentPlan: formText,
   followUp: formText,
-  notes: formText
+  notes: formText,
+  reportType: z.string().trim().max(200).optional()
 }).strict();
 
 // Multipart bodies carry the form as a JSON string next to the optional file.
@@ -74,44 +75,14 @@ const emergencyEssential = z.object({
   isEmergencyEssential: z.boolean()
 }).strict();
 
-const allowedFileTypes = new Map([
-  ['.pdf', ['application/pdf']],
-  ['.png', ['image/png']],
-  ['.jpg', ['image/jpeg']],
-  ['.jpeg', ['image/jpeg']],
-  ['.doc', ['application/msword']],
-  [
-    '.docx',
-    [
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ]
-  ]
-]);
-
+// Any file type may be attached. Files are stored encrypted, and the portal
+// only shows PDFs and images inline; anything else can only be downloaded.
 function validateMedicalFile(file) {
   if (!file) {
     throw new AppError(
       400,
       'A medical document is required.',
       'FILE_REQUIRED'
-    );
-  }
-
-  const filename = file.originalname || '';
-  const extension = filename.includes('.')
-    ? `.${filename.split('.').pop().toLowerCase()}`
-    : '';
-
-  const allowedMimeTypes = allowedFileTypes.get(extension);
-
-  if (
-    !allowedMimeTypes ||
-    !allowedMimeTypes.includes(file.mimetype)
-  ) {
-    throw new AppError(
-      400,
-      'Unsupported document type. Upload a PDF, PNG, JPG, DOC, or DOCX file.',
-      'UNSUPPORTED_FILE_TYPE'
     );
   }
 }

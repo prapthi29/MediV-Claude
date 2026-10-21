@@ -12,15 +12,10 @@ function displayValue(value) {
 }
 
 function StatusLabel({ status }) {
-  const labels = {
-    unknown: "Unknown",
-    none_known: "None known",
-    provided: "Recorded",
-  };
-
+  const provided = status === "provided";
   return (
-    <span className={`emergency-status emergency-status-${status || "unknown"}`}>
-      {labels[status] || "Unknown"}
+    <span className={`emergency-status emergency-status-${provided ? "provided" : "none_known"}`}>
+      {provided ? "Provided" : "None as of now"}
     </span>
   );
 }
@@ -299,8 +294,7 @@ export default function PatientEmergencyProfilePage() {
             <strong>Keep this information accurate.</strong>
             <span>
               If any details are incorrect, contact your doctor. Clinical
-              changes must follow the required authorization process. Do not
-              rely on this page as a substitute for emergency care.
+              changes must follow the required authorization process.
             </span>
           </div>
 
@@ -379,9 +373,7 @@ export default function PatientEmergencyProfilePage() {
               </ul>
             ) : (
               <p className="emergency-muted">
-                {profile.allergiesStatus === "none_known"
-                  ? "No known allergies have been recorded."
-                  : "Allergy information has not been established."}
+                No allergies as of now.
               </p>
             )}
           </Section>
@@ -401,9 +393,7 @@ export default function PatientEmergencyProfilePage() {
               </ul>
             ) : (
               <p className="emergency-muted">
-                {profile.chronicConditionsStatus === "none_known"
-                  ? "No known chronic conditions have been recorded."
-                  : "Chronic condition information has not been established."}
+                No chronic conditions as of now.
               </p>
             )}
           </Section>
@@ -421,9 +411,7 @@ export default function PatientEmergencyProfilePage() {
               </ul>
             ) : (
               <p className="emergency-muted">
-                {profile.medicationsStatus === "none_known"
-                  ? "No current medications have been recorded."
-                  : "Medication information has not been established."}
+                No current medications as of now.
               </p>
             )}
           </Section>

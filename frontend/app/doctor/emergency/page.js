@@ -2,49 +2,12 @@
 import { useCallback, useEffect, useState } from "react";
 import PortalShell from "../../../components/PortalShell";
 import TimeLeft from "../../../components/TimeLeft";
+import BasicProfileView from "../../../components/BasicProfileView";
 import { api } from "../../../lib/api";
 import { FieldError, scrollToField } from "../../../components/FieldError";
+import { toast } from "../../../components/Toast";
 
 const DURATIONS = [15, 30, 45];
-const GENDER = { female: "Female", male: "Male", other: "Other", prefer_not_to_say: "Prefer not to say" };
-
-function listOrStatus(items, status, render, noneText) {
-  if (status === "provided" && items?.length) return items.map(render).join("; ");
-  if (status === "none_known") return noneText;
-  return "Not established";
-}
-
-function BasicProfile({ profile }) {
-  const contact = profile.emergencyContact || {};
-  const rows = [
-    ["Blood group", profile.bloodGroup],
-    ["Gender", GENDER[profile.gender] || profile.gender],
-    ["Date of birth", profile.dateOfBirth ? `${profile.dateOfBirth}${profile.age != null ? ` (age ${profile.age})` : ""}` : null],
-    ["Allergies", listOrStatus(profile.allergies, profile.allergiesStatus, (a) => `${a.substance}${a.reaction ? ` (${a.reaction}${a.severity ? `, ${a.severity}` : ""})` : ""}`, "No known allergies")],
-    ["Chronic conditions", listOrStatus(profile.chronicConditions, profile.chronicConditionsStatus, (c) => c.name, "None known")],
-    ["Current medications", listOrStatus(profile.currentMedications, profile.medicationsStatus, (m) => [m.name, m.dosage, m.frequency].filter(Boolean).join(" "), "None")],
-    ["Emergency contact", [contact.name, contact.relationship && `(${contact.relationship})`, contact.phone].filter(Boolean).join(" ")],
-  ];
-  return (
-    <div>
-      <p style={{ fontSize: 13, margin: "0 0 10px" }}>
-        <strong style={{ color: profile.integrity?.verified ? "var(--primary)" : "var(--red)" }}>
-          {profile.integrity?.verified ? "Verified" : "Could not be verified"}
-        </strong>
-        {profile.signature?.signedByDoctorName ? ` · added by ${profile.signature.signedByDoctorName}, version ${profile.version}` : ""}
-      </p>
-      <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "minmax(130px, 180px) 1fr", gap: "6px 14px", fontSize: 13.5 }}>
-        {rows.map(([label, value]) => (
-          <div key={label} style={{ display: "contents" }}>
-            <dt style={{ color: "var(--muted)" }}>{label}</dt>
-            <dd style={{ margin: 0, fontWeight: label === "Blood group" || label === "Allergies" ? 700 : 400 }}>{value || "Not recorded"}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  );
-}
-
 export default function EmergencyAccess() {
   const [healthId, setHealthId] = useState("");
   const [reason, setReason] = useState("");
@@ -90,9 +53,11 @@ export default function EmergencyAccess() {
       setHealthId("");
       setReason("");
       setPassword("");
+      toast.success("Emergency access opened. The patient has been alerted.");
       load();
     } catch (err) {
       setFieldErrors({ submit: err.message || "Emergency access could not be opened." });
+      toast.error(err.message || "Emergency access could not be opened.");
     } finally {
       setBusy(false);
     }
@@ -106,6 +71,7 @@ export default function EmergencyAccess() {
     } catch (err) {
       setProfiles((prev) => ({ ...prev, [patientUserId]: undefined }));
       setError(err.message || "Couldn't open the basic profile.");
+      toast.error(err.message || "Couldn't open the basic profile.");
       load();
     }
   }
@@ -201,7 +167,7 @@ export default function EmergencyAccess() {
               </div>
               {profiles[g.patientUserId] && (
                 <div style={{ marginTop: 12 }}>
-                  <BasicProfile profile={profiles[g.patientUserId]} />
+                  <BasicProfileView profile={profiles[g.patientUserId]} />
                 </div>
               )}
             </div>

@@ -68,18 +68,24 @@ export default function Sidebar({ role, userLabel, userEmail, open = false, onCl
 
     patient: [
       { href: "/patient/dashboard", label: "Overview", icon: ICONS.overview },
-      { href: "/patient/records", label: "Lab reports", icon: ICONS.records },
       { href: "/patient/emergency-profile", label: "Basic profile", icon: ICONS.verify },
       { href: "/patient/consents", label: "Consent wallet", icon: ICONS.consents },
-      { href: "/patient/prescriptions", label: "Prescriptions", icon: ICONS.prescriptions },
+      {
+        label: "Medical records",
+        icon: ICONS.records,
+        children: [
+          { href: "/patient/records", label: "Lab reports" },
+          { href: "/patient/prescriptions", label: "Prescriptions" },
+        ],
+      },
     ],
 
     doctor: [
       { href: "/doctor/dashboard", label: "Overview", icon: ICONS.overview },
       { href: "/doctor/patients", label: "My patients", icon: ICONS.patients },
-      { href: "/doctor/emergency", label: "Emergency access", icon: ICONS.approvals },
       { href: "/doctor/emergency-profiles", label: "Basic profiles", icon: ICONS.verify },
       { href: "/doctor/records/new", label: "Add medical record", icon: ICONS.upload },
+      { href: "/doctor/emergency", label: "Emergency access", icon: ICONS.approvals },
     ],
 
     pharmacy: [
@@ -93,7 +99,7 @@ export default function Sidebar({ role, userLabel, userEmail, open = false, onCl
   // De-duplicate repeated hrefs (e.g. admin's two dashboard entries).
   const seen = new Set();
   const finalLinks = links.filter((l) =>
-    seen.has(l.href) ? false : seen.add(l.href)
+    !l.href ? true : seen.has(l.href) ? false : seen.add(l.href)
   );
 
   return (
@@ -125,7 +131,26 @@ export default function Sidebar({ role, userLabel, userEmail, open = false, onCl
       </div>
 
       <nav className="sidebar-nav">
-        {finalLinks.map((l) => (
+        {finalLinks.map((l) =>
+          l.children ? (
+            // A heading with its pages listed under it.
+            <div key={l.label} className="nav-group">
+              <div className="nav-group-label">
+                <Icon d={l.icon} />
+                {l.label}
+              </div>
+              {l.children.map((c) => (
+                <Link
+                  key={c.href}
+                  href={c.href}
+                  onClick={onClose}
+                  className={`nav-link nav-sublink ${pathname === c.href ? "active" : ""}`}
+                >
+                  {c.label}
+                </Link>
+              ))}
+            </div>
+          ) : (
           <Link
             key={l.label}
             href={l.href}
@@ -135,7 +160,8 @@ export default function Sidebar({ role, userLabel, userEmail, open = false, onCl
             <Icon d={l.icon} />
             {l.label}
           </Link>
-        ))}
+          )
+        )}
       </nav>
 
       <div className="sidebar-foot">

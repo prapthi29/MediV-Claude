@@ -255,7 +255,7 @@ export class EmergencyProfileService {
     if (!profile) {
       throw new AppError(
         404,
-        'Emergency medical profile not found.',
+        'Basic profile not found.',
         'EMERGENCY_PROFILE_NOT_FOUND'
       );
     }
@@ -376,7 +376,7 @@ export class EmergencyProfileService {
     if (!current) {
       throw new AppError(
         404,
-        'Create the initial emergency profile first.',
+        'Create the basic profile first.',
         'EMERGENCY_PROFILE_NOT_FOUND'
       );
     }

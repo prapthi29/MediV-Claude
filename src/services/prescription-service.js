@@ -12,17 +12,26 @@ import {
   prescriptionRootSha256
 } from './prescription-document.js';
 
+function isoDate(value) {
+  if (!value) return null;
+  if (typeof value === 'string') return value.slice(0, 10);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
+
 // A prescription approval lasts as long as the doctor's license link.
 const APPROVAL_MINUTES = 30;
 // A pharmacy can see a shared prescription for 30 minutes.
 export const SHARE_MINUTES = 30;
 
 export class PrescriptionService {
-  constructor({ prescriptionRepository, prescriptionApprovalRepository, prescriptionShareRepository, medicalStorage, fileEncryptionService, userRepository, consentService, recordRegistryClient, auditService, signingKeyService }) {
+  constructor({ prescriptionRepository, prescriptionApprovalRepository, prescriptionShareRepository, prescriptionViewRequestRepository, prescriptionDispenseRepository, medicalStorage, fileEncryptionService, userRepository, consentService, recordRegistryClient, auditService, signingKeyService }) {
     this.signingKeyService = signingKeyService;
     this.prescriptionRepository = prescriptionRepository;
     this.prescriptionApprovalRepository = prescriptionApprovalRepository;
     this.prescriptionShareRepository = prescriptionShareRepository;
+    this.prescriptionViewRequestRepository = prescriptionViewRequestRepository;
+    this.prescriptionDispenseRepository = prescriptionDispenseRepository;
     this.medicalStorage = medicalStorage;
     this.fileEncryptionService = fileEncryptionService;
     this.userRepository = userRepository;
@@ -77,7 +86,7 @@ export class PrescriptionService {
   // ISSUING A PRESCRIPTION
   // --------------------------------------------------
 
-  async create(doctorUserId, patientUserId, { title, medications, diagnosis, symptoms, followUp, notes, approvalId, password }) {
+  async create(doctorUserId, patientUserId, { title, medications, diagnosis, symptoms, followUp, followUpDate, notes, approvalId, password }) {
     if (!Array.isArray(medications) || medications.length === 0) {
       throw new AppError(400, 'Add at least one medicine.', 'MEDICATIONS_REQUIRED');
     }
@@ -87,7 +96,7 @@ export class PrescriptionService {
     await assertProfileActive(this.userRepository, patientUserId);
     await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
 
-    const built = buildPrescription({ patientUserId, medications, diagnosis, symptoms, followUp, notes });
+    const built = buildPrescription({ patientUserId, medications, diagnosis, symptoms, followUp, followUpDate, notes });
     // The doctor's password unlocks their ECDSA key; the server never signs without it.
     // Signing happens before the approval is used, so a mistyped password costs nothing.
     const { signature, signerAddress } = await this.signingKeyService.signDigest(doctorUserId, password, built.rootHash);
@@ -108,7 +117,8 @@ export class PrescriptionService {
       let prescription = await this.prescriptionRepository.create({
         patientUserId, doctorUserId, storageKey, originalFilename: 'prescription.json', contentType: PRESCRIPTION_CONTENT_TYPE,
         sizeBytes: built.buffer.length, title, contentSha256: built.rootHash, doctorSignature: signature, signerAddress, encryption,
-        format: 'form', medicationsSha256: built.medicationsHash, clinicalSha256: built.clinicalHash, approvalId: approval.id
+        format: 'form', medicationsSha256: built.medicationsHash, clinicalSha256: built.clinicalHash, approvalId: approval.id,
+        followUpDate: followUpDate || null
       });
       persisted = true;
       prescription = await this.registerOnChain(prescription);
@@ -138,7 +148,9 @@ export class PrescriptionService {
       diagnosis: opened.document?.diagnosis ?? null,
       symptoms: opened.document?.symptoms ?? null,
       followUp: opened.document?.followUp ?? null,
+      followUpDate: opened.document?.followUpDate ?? null,
       notes: opened.document?.notes ?? null,
+      dispensing: await this.dispensingFor(prescription, opened.document?.medications),
       integrity: opened.integrity
     };
   }
@@ -151,26 +163,72 @@ export class PrescriptionService {
     return { prescription: this.publicPrescription(prescription), body };
   }
 
-  // A doctor the patient has linked (active consent) can read the patient's prescriptions.
+  // A linked doctor sees the list of prescriptions, and needs the patient's
+  // approval to open one. Each approval is good for one view, and doctors
+  // never download.
   async listForDoctor(doctorUserId, patientUserId) {
     await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
-    return this.listForPatient(patientUserId);
+    const [prescriptions, requests] = await Promise.all([
+      this.listForPatient(patientUserId),
+      this.prescriptionViewRequestRepository?.listForDoctorPatient(doctorUserId, patientUserId) ?? []
+    ]);
+    const byPrescription = new Map(requests.map((r) => [r.prescription_id, r]));
+    return prescriptions.map(({ doctorEmail, followUpDate, ...p }) => {
+      const request = byPrescription.get(p.id);
+      return { ...p, viewRequest: request ? { id: request.id, status: request.status, requestedAt: request.requested_at } : null };
+    });
+  }
+
+  async requestViewForDoctor(doctorUserId, patientUserId, prescriptionId) {
+    await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
+    const prescription = await this.findForPatient(patientUserId, prescriptionId);
+    const request = await this.prescriptionViewRequestRepository.create({ prescriptionId: prescription.id, patientUserId, doctorUserId });
+    await this.auditService?.record({ eventType: 'prescription_view_requested', actorUserId: doctorUserId, subjectUserId: patientUserId, resourceType: 'prescription', resourceId: prescription.id, metadata: {} });
+    return { id: request.id, status: request.status, requestedAt: request.requested_at };
   }
 
   async viewForDoctor(doctorUserId, patientUserId, prescriptionId) {
     await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
-    const view = await this.viewForPatient(patientUserId, prescriptionId);
+    const prescription = await this.findForPatient(patientUserId, prescriptionId);
+    const used = await this.prescriptionViewRequestRepository.consumeApproved({ prescriptionId: prescription.id, patientUserId, doctorUserId });
+    if (!used) {
+      throw new AppError(403, 'The patient has to approve before you can view this prescription.', 'PRESCRIPTION_VIEW_APPROVAL_REQUIRED');
+    }
+    const { dispensing, ...view } = await this.viewForPatient(patientUserId, prescriptionId);
+    // An uploaded prescription comes with its file, to show once on screen.
+    if (prescription.format !== 'form') {
+      const stored = await this.medicalStorage.get({ key: prescription.storage_key });
+      const ciphertext = Buffer.isBuffer(stored) ? stored : stored?.body;
+      view.file = { base64: this.fileEncryptionService.decrypt(ciphertext, prescription).toString('base64'), contentType: prescription.content_type };
+    }
     await this.auditService?.record({ eventType: 'prescription_accessed', actorUserId: doctorUserId, subjectUserId: patientUserId, resourceType: 'prescription', resourceId: prescriptionId, metadata: {} });
     return view;
   }
 
-  async downloadForDoctor(doctorUserId, patientUserId, prescriptionId) {
-    await this.consentService.assertDoctorAccess(patientUserId, doctorUserId);
-    const prescription = await this.findForPatient(patientUserId, prescriptionId);
-    const { body: ciphertext } = await this.medicalStorage.get({ key: prescription.storage_key });
-    const body = this.fileEncryptionService.decrypt(ciphertext, prescription);
-    await this.auditService?.record({ eventType: 'prescription_accessed', actorUserId: doctorUserId, subjectUserId: patientUserId, resourceType: 'prescription', resourceId: prescription.id, metadata: {} });
-    return { prescription: this.publicPrescription(prescription), body };
+  async listViewRequestsForPatient(patientUserId) {
+    return this.prescriptionViewRequestRepository.listForPatient(patientUserId);
+  }
+
+  async decideViewRequest(patientUserId, requestId, status) {
+    const request = await this.prescriptionViewRequestRepository.decide({ requestId, patientUserId, status });
+    if (!request) throw new AppError(409, 'This request is no longer open.', 'PRESCRIPTION_REQUEST_NOT_OPEN');
+    await this.auditService?.record({ eventType: `prescription_view_${status}`, actorUserId: patientUserId, subjectUserId: request.doctor_user_id, resourceType: 'prescription', resourceId: request.prescription_id, metadata: {} });
+    return request;
+  }
+
+  // How much of each medicine has been handed over so far.
+  async dispensingFor(prescription, medications) {
+    const visits = (await this.prescriptionDispenseRepository?.listForPrescription(prescription.id)) ?? [];
+    const given = (medications ?? []).map((_, i) => visits.reduce((sum, v) => sum + (Number(v.quantities?.[i]) || 0), 0));
+    return {
+      visits: visits.map((v) => ({ at: v.created_at, quantities: v.quantities })),
+      medicines: (medications ?? []).map((m, i) => ({
+        name: m.name,
+        total: m.quantity ?? null,
+        given: given[i],
+        left: m.quantity ? Math.max(0, m.quantity - given[i]) : null
+      }))
+    };
   }
 
   async findForPatient(patientUserId, prescriptionId) {
@@ -309,12 +367,15 @@ export class PrescriptionService {
         signerAddress: prescription.signer_address
       },
       integrity,
+      dispensing: await this.dispensingFor(prescription, medications),
       dispensed: prescription.dispensed_at ? { at: prescription.dispensed_at, byUserId: prescription.dispensed_by_user_id } : null
     };
   }
 
-  // The pharmacy signs the dispense with its own key. A prescription is dispensed once.
-  async dispense(pharmacyUserId, shareId, password) {
+  // The pharmacy records how many of each medicine it gave and signs that
+  // with its own key. A prescription can be handed over in parts; once every
+  // medicine is fully given it is dispensed and no pharmacy can open it again.
+  async dispense(pharmacyUserId, shareId, password, quantities) {
     const { prescription } = await this.requireShare(pharmacyUserId, shareId);
     if (prescription.dispensed_at) {
       throw new AppError(409, 'This prescription has already been dispensed.', 'PRESCRIPTION_ALREADY_DISPENSED');
@@ -324,25 +385,80 @@ export class PrescriptionService {
       throw new AppError(409, 'This prescription failed verification and cannot be dispensed.', 'PRESCRIPTION_NOT_VERIFIED');
     }
 
+    const medications = document?.medications ?? [];
+    const before = await this.dispensingFor(prescription, medications);
+    const given = this.checkQuantities(quantities, before.medicines);
+
     const dispensedAt = new Date();
     const digest = crypto.createHash('sha256').update(stableStringify({
-      type: 'medivault-dispense/1',
+      type: 'medivault-dispense/2',
       prescriptionId: prescription.id,
       prescriptionSha256: prescription.content_sha256,
       pharmacyUserId,
+      quantities: given,
       dispensedAt: dispensedAt.toISOString()
     }), 'utf8').digest('hex');
     const { signature, signerAddress } = await this.signingKeyService.signDigest(pharmacyUserId, password, digest);
 
-    const updated = await this.prescriptionRepository.markDispensed(prescription.id, { pharmacyUserId, dispensedAt, signature, signerAddress });
-    if (!updated) {
-      throw new AppError(409, 'This prescription has already been dispensed.', 'PRESCRIPTION_ALREADY_DISPENSED');
+    await this.prescriptionDispenseRepository.create({
+      prescriptionId: prescription.id, pharmacyUserId, quantities: given, dispenseSha256: digest, signature, signerAddress, createdAt: dispensedAt
+    });
+
+    // A medicine without a total counts as given once any amount is handed over.
+    const complete = before.medicines.every((m, i) =>
+      m.total ? m.given + given[i] >= m.total : m.given + given[i] > 0
+    );
+    let finishedAt = null;
+    if (complete) {
+      const updated = await this.prescriptionRepository.markDispensed(prescription.id, { pharmacyUserId, dispensedAt, signature, signerAddress });
+      if (!updated) {
+        throw new AppError(409, 'This prescription has already been dispensed.', 'PRESCRIPTION_ALREADY_DISPENSED');
+      }
+      finishedAt = updated.dispensed_at;
+      // Once fully dispensed, no pharmacy can open this prescription again.
+      await this.prescriptionShareRepository.revokeAllForPrescription(prescription.id);
     }
-    // Dispensing ends every pharmacy's access to this prescription.
-    await this.prescriptionShareRepository.revokeAllForPrescription(prescription.id);
-    const medicationSummary = (document?.medications ?? []).map((m) => m.name).join(', ');
-    await this.auditService?.record({ eventType: 'prescription_dispensed', actorUserId: pharmacyUserId, subjectUserId: prescription.patient_user_id, resourceType: 'prescription', resourceId: prescription.id, metadata: { dispenseSha256: digest, signerAddress, medication_summary: medicationSummary } });
-    return { prescriptionId: prescription.id, dispensedAt: updated.dispensed_at };
+
+    const medicationSummary = medications
+      .map((m, i) => (given[i] ? `${m.name} × ${given[i]}` : null))
+      .filter(Boolean)
+      .join(', ');
+    await this.auditService?.record({ eventType: 'prescription_dispensed', actorUserId: pharmacyUserId, subjectUserId: prescription.patient_user_id, resourceType: 'prescription', resourceId: prescription.id, metadata: { dispenseSha256: digest, signerAddress, medication_summary: medicationSummary, quantities: given, complete } });
+    return {
+      prescriptionId: prescription.id,
+      complete,
+      dispensedAt: finishedAt,
+      dispensing: await this.dispensingFor(prescription, medications)
+    };
+  }
+
+  // quantities[i] is how many of medicine i are handed over now.
+  checkQuantities(quantities, medicines) {
+    if (!Array.isArray(quantities) || quantities.length !== medicines.length) {
+      throw new AppError(400, 'Enter how many of each medicine you are giving.', 'QUANTITIES_REQUIRED');
+    }
+    const given = quantities.map((q) => Number(q));
+    medicines.forEach((m, i) => {
+      if (!Number.isInteger(given[i]) || given[i] < 0) {
+        throw new AppError(400, `Enter a whole number for ${m.name}.`, 'INVALID_QUANTITY');
+      }
+      if (m.left !== null && given[i] > m.left) {
+        throw new AppError(400, `Only ${m.left} of ${m.name} ${m.left === 1 ? 'is' : 'are'} left to give.`, 'QUANTITY_TOO_HIGH');
+      }
+    });
+    if (!given.some((q) => q > 0)) {
+      throw new AppError(400, 'Enter how many you are giving for at least one medicine.', 'QUANTITIES_REQUIRED');
+    }
+    return given;
+  }
+
+  // Lets the patient check a pharmacy ID before sharing prescriptions with it.
+  async findPharmacy(pharmacyLicenseId) {
+    const pharmacy = await this.userRepository.findActivePharmacyByLicenseId(pharmacyLicenseId);
+    if (!pharmacy) {
+      throw new AppError(404, 'No approved pharmacy has that ID.', 'PHARMACY_NOT_FOUND');
+    }
+    return { name: pharmacy.name, licenseId: pharmacy.license_id };
   }
 
   // What a pharmacy may see about a share: no doctor, diagnosis or dates of issue.
@@ -415,6 +531,7 @@ export class PrescriptionService {
       id: prescription.id, patientUserId: prescription.patient_user_id, doctorUserId: prescription.doctor_user_id,
       doctorName: prescription.doctor_name ?? null, format: prescription.format ?? 'file',
       dispensedAt: prescription.dispensed_at ?? null,
+      followUpDate: isoDate(prescription.follow_up_date),
       originalFilename: prescription.original_filename, contentType: prescription.content_type, sizeBytes: prescription.size_bytes,
       title: prescription.title, blockchainStatus: prescription.blockchain_status, createdAt: prescription.created_at
     };

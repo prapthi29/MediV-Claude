@@ -5,6 +5,7 @@ import TimeLeft from "../../../components/TimeLeft";
 import { EmptyState, StatusBadge, fmtDateTime } from "../../../components/ui";
 import { api } from "../../../lib/api";
 import { FieldError } from "../../../components/FieldError";
+import { toast } from "../../../components/Toast";
 import { verifyPrescriptionInBrowser } from "../../../lib/verify-prescription";
 
 export default function SharedPrescriptions() {
@@ -13,9 +14,11 @@ export default function SharedPrescriptions() {
   const [browserCheck, setBrowserCheck] = useState(null);
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  // How many of each medicine are being handed over now, and any problem with each.
+  const [giving, setGiving] = useState([]);
+  const [givingErrors, setGivingErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [pharmacyId, setPharmacyId] = useState("");
 
   const load = useCallback(() => {
@@ -33,12 +36,13 @@ export default function SharedPrescriptions() {
 
   async function openShare(shareId) {
     setError("");
-    setNotice("");
     setBrowserCheck(null);
     try {
       const view = await api.openSharedPrescription(shareId);
       setOpen(view);
       setPasswordError("");
+      setGiving(view.medications.map(() => ""));
+      setGivingErrors({});
       setBrowserCheck(await verifyPrescriptionInBrowser(view.medications, view.proof));
     } catch (err) {
       setOpen(null);
@@ -49,32 +53,49 @@ export default function SharedPrescriptions() {
 
   async function dispense(e) {
     e.preventDefault();
-    if (!password) return setPasswordError("Enter your password to confirm.");
+    const counts = open.dispensing?.medicines || [];
+    const quantities = giving.map((q) => Number(q || 0));
+    const errs = {};
+    quantities.forEach((q, i) => {
+      if (counts[i]?.left != null && q > counts[i].left) errs[i] = `Only ${counts[i].left} left to give.`;
+    });
+    if (!quantities.some((q) => q > 0)) errs[0] = errs[0] || "Enter how many you are giving.";
+    setGivingErrors(errs);
+    if (!password) setPasswordError("Enter your password to confirm.");
+    if (Object.keys(errs).length || !password) return;
     setBusy(true);
     setError("");
     try {
-      await api.dispensePrescription(open.share.id, password);
+      const result = await api.dispensePrescription(open.share.id, password, quantities);
       setPassword("");
-      // Dispensing ends this pharmacy's access to the prescription.
-      setOpen(null);
-      setBrowserCheck(null);
-      setNotice("Marked as dispensed. This prescription is no longer available to you; it's listed in your dispensing history.");
+      if (result.complete) {
+        // Once everything is given, this pharmacy can no longer open the prescription.
+        setOpen(null);
+        setBrowserCheck(null);
+        toast.success("Everything is given. The prescription is closed and listed in your dispensing history.");
+      } else {
+        setOpen((current) => ({ ...current, dispensing: result.dispensing }));
+        setGiving(open.medications.map(() => ""));
+        toast.success("Saved. The rest can be given later while the patient's share is open.");
+      }
       load();
     } catch (err) {
-      setPasswordError(err.message || "Couldn't mark this prescription as dispensed.");
+      setPasswordError(err.message || "Couldn't save what you gave.");
+      toast.error(err.message || "Couldn't save what you gave.");
     } finally {
       setBusy(false);
     }
   }
 
   const verified = open && open.integrity.valid && browserCheck?.medicinesMatch && browserCheck?.signatureMatches;
+  const canGive = Boolean(verified && !open?.dispensed);
 
   return (
     <PortalShell
       role="pharmacy"
       eyebrow="Pharmacy Portal"
       title="Shared prescriptions"
-      subtitle="Patients share a prescription with your pharmacy ID for 30 minutes. You see the patient's name, patient ID and the medicines only, and access ends as soon as you dispense."
+      subtitle="Patients share a prescription with your pharmacy ID for 30 minutes. You see the patient's name, patient ID and the medicines only. You can give medicines in parts; access ends once everything is given."
     >
       {pharmacyId && (
         <div className="card card-pad" style={{ marginBottom: 20 }}>
@@ -127,12 +148,6 @@ export default function SharedPrescriptions() {
         </div>
       )}
 
-      {notice && !open && (
-        <div className="card card-pad" role="status" style={{ color: "var(--primary-dark)", fontWeight: 600 }}>
-          {notice}
-        </div>
-      )}
-
       {open && (
         <div className="card card-pad">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
@@ -156,18 +171,47 @@ export default function SharedPrescriptions() {
                 <th>How often</th>
                 <th>For how long</th>
                 <th>Instructions</th>
+                <th>Total</th>
+                <th>Given</th>
+                <th>Left</th>
+                {canGive && <th>Giving now</th>}
               </tr>
             </thead>
             <tbody>
-              {open.medications.map((m, i) => (
-                <tr key={i}>
-                  <td style={{ fontWeight: 600 }}>{m.name}</td>
-                  <td>{m.dose}</td>
-                  <td>{m.frequency}</td>
-                  <td>{m.duration}</td>
-                  <td>{m.instructions || "—"}</td>
-                </tr>
-              ))}
+              {open.medications.map((m, i) => {
+                const count = open.dispensing?.medicines?.[i];
+                return (
+                  <tr key={i}>
+                    <td style={{ fontWeight: 600 }}>{m.name}</td>
+                    <td>{m.dose}</td>
+                    <td>{m.frequency}</td>
+                    <td>{m.duration}</td>
+                    <td>{m.instructions || "—"}</td>
+                    <td>{m.quantity ?? "—"}</td>
+                    <td>{count?.given ?? 0}</td>
+                    <td>{count?.left ?? "—"}</td>
+                    {canGive && (
+                      <td style={{ minWidth: 110 }}>
+                        <input
+                          aria-label={`How many ${m.name} you are giving`}
+                          inputMode="numeric"
+                          maxLength={5}
+                          value={giving[i] ?? ""}
+                          disabled={count?.left === 0}
+                          placeholder={count?.left === 0 ? "Done" : "0"}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, "");
+                            setGiving((list) => list.map((q, j) => (j === i ? value : q)));
+                            setGivingErrors({});
+                          }}
+                          style={{ width: 90 }}
+                        />
+                        <FieldError message={givingErrors[i]} />
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 
@@ -208,7 +252,7 @@ export default function SharedPrescriptions() {
                   />
                 </div>
                 <button className="btn btn-primary" type="submit" disabled={busy}>
-                  {busy ? "Saving…" : "Mark as dispensed"}
+                  {busy ? "Saving…" : "Save what you gave"}
                 </button>
               </div>
               <FieldError message={passwordError} />
@@ -216,7 +260,6 @@ export default function SharedPrescriptions() {
           ) : (
             <p style={{ color: "var(--red)", fontWeight: 600, margin: 0 }}>Do not dispense this prescription.</p>
           )}
-          {notice && <p style={{ color: "var(--primary)", fontWeight: 600, marginBottom: 0 }}>{notice}</p>}
         </div>
       )}
     </PortalShell>

@@ -2,12 +2,12 @@
 
 // The read-only view of a prescription, for the patient and a linked doctor.
 import { AttachmentPanel } from "./DiagnosisRecord";
-import { fmtDateTime } from "./ui";
+import { fmtDate, fmtDateTime } from "./ui";
 import { makeTextPdf, safeFilename, saveBlob } from "../lib/pdf";
 
 // A typed prescription as a PDF to keep.
 export function savePrescriptionPdf(view) {
-  const { prescription, medications, diagnosis, symptoms, notes, followUp, integrity } = view;
+  const { prescription, medications, diagnosis, symptoms, notes, followUp, followUpDate, integrity } = view;
   const blocks = [
     { type: "title", text: prescription.title || "Prescription" },
     { type: "row", label: "Prescribed by", text: prescription.doctorName || "-" },
@@ -19,11 +19,13 @@ export function savePrescriptionPdf(view) {
   if (symptoms) blocks.push({ type: "heading", text: "Symptoms" }, { type: "text", text: symptoms });
   blocks.push({ type: "heading", text: "Medicines" });
   (medications || []).forEach((m, i) => {
-    blocks.push({ type: "text", text: `${i + 1}. ${m.name}: ${[m.dose, m.frequency, m.duration].filter(Boolean).join(", ")}` });
+    blocks.push({ type: "text", text: `${i + 1}. ${m.name}: ${[m.dose, m.frequency, m.duration, m.quantity && `total ${m.quantity}`].filter(Boolean).join(", ")}` });
     if (m.instructions) blocks.push({ type: "muted", text: `    ${m.instructions}` });
   });
   if (notes) blocks.push({ type: "heading", text: "Advice" }, { type: "text", text: notes });
-  if (followUp) blocks.push({ type: "heading", text: "Follow-up" }, { type: "text", text: followUp });
+  if (followUp || followUpDate) {
+    blocks.push({ type: "heading", text: "Follow-up" }, { type: "text", text: [followUpDate && `On ${fmtDate(followUpDate)}`, followUp].filter(Boolean).join(". ") });
+  }
   blocks.push(
     { type: "heading", text: "Verification" },
     { type: "muted", text: integrity?.valid ? "Verified: this prescription is genuine and has not been changed." : "This prescription could not be verified." }
@@ -32,7 +34,9 @@ export function savePrescriptionPdf(view) {
 }
 
 export function PrescriptionView({ view, onDownload, loadFile }) {
-  const { prescription, medications, diagnosis, symptoms, notes, followUp, integrity } = view;
+  const { prescription, medications, diagnosis, symptoms, notes, followUp, followUpDate, integrity, dispensing } = view;
+  const counts = dispensing?.medicines;
+  const showCounts = Boolean(counts?.some((c) => c.total || c.given));
   return (
     <div>
       <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap", marginBottom: 6 }}>
@@ -59,7 +63,9 @@ export function PrescriptionView({ view, onDownload, loadFile }) {
               <th>Dose</th>
               <th>How often</th>
               <th>For how long</th>
+              <th>Total</th>
               <th>Instructions</th>
+              {showCounts && <th>Given / left</th>}
             </tr>
           </thead>
           <tbody>
@@ -69,7 +75,14 @@ export function PrescriptionView({ view, onDownload, loadFile }) {
                 <td>{m.dose}</td>
                 <td>{m.frequency}</td>
                 <td>{m.duration}</td>
+                <td>{m.quantity || "—"}</td>
                 <td>{m.instructions || "—"}</td>
+                {showCounts && (
+                  <td>
+                    {counts[i]?.given ?? 0}
+                    {counts[i]?.left != null ? ` / ${counts[i].left} left` : ""}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -80,15 +93,16 @@ export function PrescriptionView({ view, onDownload, loadFile }) {
           attachment={{ filename: prescription.originalFilename || "prescription", contentType: prescription.contentType, size: prescription.sizeBytes }}
           loadFile={loadFile}
           autoOpen
+          canDownload={Boolean(onDownload)}
         />
       )}
-      {[diagnosis, symptoms, notes, followUp].some(Boolean) && (
+      {[diagnosis, symptoms, notes, followUp, followUpDate].some(Boolean) && (
         <dl style={{ margin: "14px 0 0", display: "grid", gridTemplateColumns: "minmax(110px, 160px) 1fr", gap: "6px 14px", fontSize: 13.5 }}>
           {[
             ["Diagnosis", diagnosis],
             ["Symptoms", symptoms],
             ["Advice", notes],
-            ["Follow-up", followUp],
+            ["Follow-up", [followUpDate && `On ${fmtDate(followUpDate)}`, followUp].filter(Boolean).join(". ")],
           ]
             .filter(([, value]) => value)
             .map(([label, value]) => (

@@ -192,6 +192,7 @@ export default function PatientRecords() {
             view={open}
             loadFile={() => api.fetchOwnRecordFile(open.record.id)}
             autoOpenFile
+            canDownload
           />
         </div>
       )}

@@ -8,6 +8,12 @@ export function createDatabase(config) {
       : undefined
   });
 
+  // Times are stored with their time zone; this makes the database show and
+  // compute them in India Standard Time.
+  pool.on('connect', (client) => {
+    client.query("SET TIME ZONE 'Asia/Kolkata'").catch(() => {});
+  });
+
   return {
     query: (text, values) => pool.query(text, values),
 

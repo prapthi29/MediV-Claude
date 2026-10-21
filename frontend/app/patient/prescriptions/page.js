@@ -1,58 +1,29 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import PortalShell from "../../../components/PortalShell";
 import TimeLeft from "../../../components/TimeLeft";
 import { EmptyState, fmtDate, fmtDateTime } from "../../../components/ui";
 import { api } from "../../../lib/api";
 import { PrescriptionView, savePrescriptionPdf } from "../../../components/PrescriptionView";
 
-function SharePanel({ prescription, shares, onShare, onRevoke, busy }) {
-  const [pharmacyId, setPharmacyId] = useState("");
-  const mine = shares.filter((s) => s.prescriptionId === prescription.id);
-  const active = mine.filter((s) => s.status === "active");
-
+// Where the prescription stands with pharmacies. Sharing itself happens in
+// the consent wallet, where the patient links a pharmacy.
+function DispenseNote({ prescription, shares }) {
+  const active = shares.filter((s) => s.prescriptionId === prescription.id && s.status === "active");
   if (prescription.dispensedAt) {
-    const by = mine.find((s) => s.status === "dispensed");
-    return (
-      <p style={{ marginTop: 16, fontWeight: 600 }}>
-        Dispensed{by?.pharmacyName ? ` by ${by.pharmacyName}` : ""} on {fmtDateTime(prescription.dispensedAt)}. It can't be shared again.
-      </p>
-    );
+    return <p style={{ marginTop: 16, fontWeight: 600 }}>Fully dispensed on {fmtDateTime(prescription.dispensedAt)}.</p>;
   }
   if (prescription.format !== "form") return null;
-
   return (
-    <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
-      <h4 style={{ margin: "0 0 6px", fontSize: 14 }}>Share with a pharmacy</h4>
-      <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "0 0 10px" }}>
-        The pharmacy sees your name and the medicines for 30 minutes, not the diagnosis or advice. You can stop sharing sooner.
-      </p>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (pharmacyId.trim()) onShare(prescription.id, pharmacyId.trim()).then((ok) => ok && setPharmacyId(""));
-        }}
-        style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}
-      >
-        <div className="field" style={{ marginBottom: 0, flex: "1 1 220px" }}>
-          <label htmlFor="pharmacy-id">Pharmacy ID</label>
-          <input id="pharmacy-id" value={pharmacyId} onChange={(e) => setPharmacyId(e.target.value)} placeholder="The ID the pharmacy gives you" autoComplete="off" />
-        </div>
-        <button className="btn btn-primary" type="submit" disabled={busy === "share"}>
-          {busy === "share" ? "Sharing…" : "Share for 30 minutes"}
-        </button>
-      </form>
-      {active.map((s) => (
-        <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "8px 0" }}>
-          <span>
-            Shared with <strong>{s.pharmacyName}</strong> · <TimeLeft until={s.expiresAt} />
-          </span>
-          <button className="btn btn-danger btn-sm" disabled={busy === s.id} onClick={() => onRevoke(s.id)}>
-            Stop sharing
-          </button>
-        </div>
-      ))}
-    </div>
+    <p style={{ marginTop: 16, fontSize: 13, color: "var(--muted)" }}>
+      {active.length > 0 ? (
+        <>
+          Shared with {active.map((s) => s.pharmacyName).join(", ")} · <TimeLeft until={active[0].expiresAt} />.{" "}
+        </>
+      ) : null}
+      To give this to a pharmacy, link the pharmacy in your <Link href="/patient/consents">consent wallet</Link>.
+    </p>
   );
 }
 
@@ -60,19 +31,21 @@ export default function PatientPrescriptions() {
   const [prescriptions, setPrescriptions] = useState(null);
   const [requests, setRequests] = useState([]);
   const [open, setOpen] = useState(null);
+  const [viewRequests, setViewRequests] = useState([]);
   const [shares, setShares] = useState([]);
-  const [shareBusy, setShareBusy] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState("");
 
   async function load() {
-    const [rows, approvals, shareRows] = await Promise.all([
+    const [rows, approvals, viewRows, shareRows] = await Promise.all([
       api.getPatientPrescriptions().catch(() => null),
       api.getPrescriptionRequests().catch(() => []),
+      api.getPrescriptionViewRequests().catch(() => []),
       api.getPrescriptionShares().catch(() => []),
     ]);
     if (rows) setPrescriptions(rows);
     setRequests(approvals);
+    setViewRequests(viewRows);
     setShares(shareRows);
   }
 
@@ -87,11 +60,15 @@ export default function PatientPrescriptions() {
     };
   }, []);
 
-  async function decide(id, decision) {
+  async function decide(id, decision, kind = "write") {
     setBusyId(id);
     setError("");
     try {
-      await api.decidePrescriptionRequest(id, decision);
+      if (kind === "view") {
+        await api.decidePrescriptionViewRequest(id, { approve: "approved", reject: "rejected", revoke: "revoked" }[decision]);
+      } else {
+        await api.decidePrescriptionRequest(id, decision);
+      }
       await load();
     } catch (e) {
       setError(e.message || "Couldn't update the request.");
@@ -122,42 +99,21 @@ export default function PatientPrescriptions() {
     }
   }
 
-  async function share(prescriptionId, pharmacyLicenseId) {
-    setShareBusy("share");
-    setError("");
-    try {
-      await api.sharePrescription(prescriptionId, pharmacyLicenseId);
-      await load();
-      return true;
-    } catch (e) {
-      setError(e.message || "Couldn't share the prescription.");
-      return false;
-    } finally {
-      setShareBusy(null);
-    }
-  }
-
-  async function stopSharing(shareId) {
-    setShareBusy(shareId);
-    try {
-      await api.revokePrescriptionShare(shareId);
-      await load();
-    } catch (e) {
-      setError(e.message || "Couldn't stop sharing.");
-    } finally {
-      setShareBusy(null);
-    }
-  }
-
-  const pending = requests.filter((r) => r.status === "pending");
-  const unused = requests.filter((r) => r.status === "approved");
+  const pending = [
+    ...requests.filter((r) => r.status === "pending").map((r) => ({ ...r, kind: "write", what: "wants to write you a prescription" })),
+    ...viewRequests.filter((r) => r.status === "pending").map((r) => ({ ...r, kind: "view", what: `wants to view “${r.prescription_title || "a prescription"}” once` })),
+  ];
+  const unused = [
+    ...requests.filter((r) => r.status === "approved").map((r) => ({ ...r, kind: "write", what: "write a prescription" })),
+    ...viewRequests.filter((r) => r.status === "approved").map((r) => ({ ...r, kind: "view", what: `view “${r.prescription_title || "a prescription"}”` })),
+  ];
 
   return (
     <PortalShell
       role="patient"
       eyebrow="Patient Portal"
       title="Prescriptions"
-      subtitle="Doctors ask you before writing each prescription. You can view, download or share any of them with a pharmacy."
+      subtitle="Doctors ask you before writing or viewing each prescription. Only you can download them."
     >
       {error && <div className="error-text" role="alert">{error}</div>}
 
@@ -167,15 +123,15 @@ export default function PatientPrescriptions() {
         {pending.map((r) => (
           <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "8px 0", borderTop: "1px solid var(--border)" }}>
             <span>
-              <strong>{r.doctor_name || r.doctor_email}</strong> wants to write you a prescription
+              <strong>{r.doctor_name || r.doctor_email}</strong> {r.what}
               {r.doctor_license_id && <span style={{ color: "var(--muted)", fontSize: 12 }}> · License {r.doctor_license_id}</span>}
               <span style={{ color: "var(--muted)", fontSize: 12 }}> · {fmtDateTime(r.requested_at)}</span>
             </span>
             <span style={{ whiteSpace: "nowrap" }}>
-              <button className="btn btn-primary btn-sm" disabled={busyId === r.id} onClick={() => decide(r.id, "approve")}>
+              <button className="btn btn-primary btn-sm" disabled={busyId === r.id} onClick={() => decide(r.id, "approve", r.kind)}>
                 Allow
               </button>{" "}
-              <button className="btn btn-danger btn-sm" disabled={busyId === r.id} onClick={() => decide(r.id, "reject")}>
+              <button className="btn btn-danger btn-sm" disabled={busyId === r.id} onClick={() => decide(r.id, "reject", r.kind)}>
                 Deny
               </button>
             </span>
@@ -184,9 +140,9 @@ export default function PatientPrescriptions() {
         {unused.map((r) => (
           <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "8px 0", borderTop: "1px solid var(--border)" }}>
             <span>
-              Approved for <strong>{r.doctor_name || r.doctor_email}</strong>, not used yet
+              <strong>{r.doctor_name || r.doctor_email}</strong> may {r.what}, not used yet
             </span>
-            <button className="btn btn-danger btn-sm" disabled={busyId === r.id} onClick={() => decide(r.id, "revoke")}>
+            <button className="btn btn-danger btn-sm" disabled={busyId === r.id} onClick={() => decide(r.id, "revoke", r.kind)}>
               Revoke
             </button>
           </div>
@@ -200,13 +156,7 @@ export default function PatientPrescriptions() {
             onDownload={() => download(open.prescription.id)}
             loadFile={() => api.fetchPatientPrescriptionFile(open.prescription.id)}
           />
-          <SharePanel
-            prescription={prescriptions?.find((p) => p.id === open.prescription.id) || open.prescription}
-            shares={shares}
-            onShare={share}
-            onRevoke={stopSharing}
-            busy={shareBusy}
-          />
+          <DispenseNote prescription={prescriptions?.find((p) => p.id === open.prescription.id) || open.prescription} shares={shares} />
         </div>
       )}
 

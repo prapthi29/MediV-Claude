@@ -56,7 +56,10 @@ export function EmptyState({ title, body }) {
 
 export function fmtDate(iso) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  // A bare YYYY-MM-DD date is a calendar day, not a moment in UTC.
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  const date = day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])) : new Date(iso);
+  return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
 export function fmtDateTime(iso) {

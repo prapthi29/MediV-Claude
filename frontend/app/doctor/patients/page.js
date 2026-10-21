@@ -5,7 +5,8 @@ import Link from "next/link";
 import PortalShell from "../../../components/PortalShell";
 import TimeLeft from "../../../components/TimeLeft";
 import { RecordView, base64ToBlob, typeLabel } from "../../../components/DiagnosisRecord";
-import { PrescriptionView, savePrescriptionPdf } from "../../../components/PrescriptionView";
+import { PrescriptionView } from "../../../components/PrescriptionView";
+import { toast } from "../../../components/Toast";
 import { EmptyState, fmtDate, fmtDateTime } from "../../../components/ui";
 import { api } from "../../../lib/api";
 
@@ -49,21 +50,48 @@ export default function DoctorPatients() {
       .catch(() => setPrescriptionsByPatient((prev) => ({ ...prev, [patientId]: [] })));
   }
 
+  // Opening a prescription uses up the patient's approval.
   function viewPrescription(patientId, prescriptionId) {
-    if (viewingRx?.prescription.id === prescriptionId) return setViewingRx(null);
     return run(`rx:${prescriptionId}`, async () => {
       setViewingRx({ ...(await api.viewPrescriptionForDoctor(patientId, prescriptionId)), patientId });
+      await loadRecords(patientId);
     });
   }
 
-  // Typed prescriptions download as a PDF; older uploaded ones as the file.
-  function downloadPrescription(patientId, prescription) {
-    return run(`rx:${prescription.id}`, async () => {
-      const view =
-        viewingRx?.prescription.id === prescription.id ? viewingRx : await api.viewPrescriptionForDoctor(patientId, prescription.id);
-      if (view.medications) savePrescriptionPdf(view);
-      else await api.downloadPrescriptionForDoctor(patientId, prescription.id, prescription.originalFilename || "prescription");
+  function requestPrescriptionView(patientId, prescriptionId) {
+    return run(`rx:${prescriptionId}`, async () => {
+      await api.requestPrescriptionViewForDoctor(patientId, prescriptionId);
+      toast.success("Request sent. You can view it once the patient approves.");
+      await loadRecords(patientId);
     });
+  }
+
+  function prescriptionAction(patientId, p) {
+    const status = p.viewRequest?.status;
+    const busy = busyKey === `rx:${p.id}`;
+    if (viewingRx?.prescription.id === p.id) {
+      return (
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setViewingRx(null)}>
+          Close
+        </button>
+      );
+    }
+    if (status === "approved") {
+      return (
+        <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => viewPrescription(patientId, p.id)}>
+          View now (once)
+        </button>
+      );
+    }
+    if (status === "pending") return <span style={{ color: "var(--muted)", fontSize: 12.5 }}>{VIEW_STATUS.pending}</span>;
+    return (
+      <>
+        {status && <span style={{ color: "var(--muted)", fontSize: 12, marginRight: 6 }}>{VIEW_STATUS[status]}.</span>}
+        <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => requestPrescriptionView(patientId, p.id)}>
+          {status ? "Request again" : "Request to view"}
+        </button>
+      </>
+    );
   }
 
   // Refresh the open patient's records so approvals show up without a reload.
@@ -91,7 +119,7 @@ export default function DoctorPatients() {
     try {
       await action();
     } catch (err) {
-      setError(err.message || "Something went wrong.");
+      toast.error(err.message || "Something went wrong.");
     } finally {
       setBusyKey(null);
     }
@@ -100,6 +128,7 @@ export default function DoctorPatients() {
   function requestView(patientId, recordId) {
     return run(`view:${recordId}`, async () => {
       await api.requestRecordAccess(patientId, recordId);
+      toast.success("Request sent. You can view it once the patient approves.");
       await loadRecords(patientId);
     });
   }
@@ -166,10 +195,10 @@ export default function DoctorPatients() {
         <div className="card card-pad" style={{ marginBottom: 16 }}>
           <PrescriptionView
             view={viewingRx}
-            onDownload={() => savePrescriptionPdf(viewingRx)}
-            loadFile={() => api.fetchPrescriptionFileForDoctor(viewingRx.patientId, viewingRx.prescription.id)}
+            loadFile={viewingRx.file?.base64 ? async () => base64ToBlob(viewingRx.file.base64, viewingRx.file.contentType) : null}
           />
-          <p style={{ marginBottom: 0, marginTop: 12 }}>
+          <p style={{ color: "var(--muted)", fontSize: 12.5, marginBottom: 0, marginTop: 12 }}>
+            This approval is now used. Closing this panel means you need a new approval to see it again.{" "}
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setViewingRx(null)}>
               Close
             </button>
@@ -273,14 +302,7 @@ export default function DoctorPatients() {
                                     </td>
                                     <td>{p.doctorName || "—"}</td>
                                     <td>{fmtDate(p.createdAt)}</td>
-                                    <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
-                                      <button type="button" className="btn btn-ghost btn-sm" disabled={busyKey === `rx:${p.id}`} onClick={() => downloadPrescription(patientId, p)}>
-                                        Download
-                                      </button>{" "}
-                                      <button type="button" className="btn btn-primary btn-sm" disabled={busyKey === `rx:${p.id}`} onClick={() => viewPrescription(patientId, p.id)}>
-                                        {viewingRx?.prescription.id === p.id ? "Close" : "View"}
-                                      </button>
-                                    </td>
+                                    <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>{prescriptionAction(patientId, p)}</td>
                                   </tr>
                                 ))}
                               </tbody>

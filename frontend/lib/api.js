@@ -382,7 +382,7 @@ export const api = {
   // ---------- prescriptions ----------
 
   // The doctor's password unlocks their signing key on the server for this one signature.
-  createPrescription: ({ patientId, approvalId, title, medications, diagnosis, symptoms, notes, followUp, password }) =>
+  createPrescription: ({ patientId, approvalId, title, medications, diagnosis, symptoms, notes, followUp, followUpDate, password }) =>
     request("/doctor/prescriptions", {
       method: "POST",
       body: {
@@ -394,6 +394,7 @@ export const api = {
         symptoms: symptoms || undefined,
         notes: notes || undefined,
         followUp: followUp || undefined,
+        followUpDate: followUpDate || undefined,
         password,
       },
     }).then((r) => r.prescription),
@@ -429,6 +430,10 @@ export const api = {
       body: { pharmacyLicenseId },
     }).then((r) => r.share),
 
+  // Checks a pharmacy ID before the patient shares prescriptions with it.
+  findPharmacy: (licenseId) =>
+    request(`/patients/me/pharmacies/${encodeURIComponent(licenseId)}`).then((r) => r.pharmacy),
+
   getPrescriptionShares: () =>
     request("/patients/me/prescription-shares").then((r) => r.shares || []),
 
@@ -442,10 +447,11 @@ export const api = {
 
   openSharedPrescription: (shareId) => request(`/pharmacy/shares/${shareId}`),
 
-  dispensePrescription: (shareId, password) =>
+  // quantities[i] is how many of medicine i the pharmacy is handing over now.
+  dispensePrescription: (shareId, password, quantities) =>
     request(`/pharmacy/shares/${shareId}/dispense`, {
       method: "POST",
-      body: { password },
+      body: { password, quantities },
     }).then((r) => r.dispensed),
 
   getPatientPrescriptions: () =>
@@ -463,11 +469,19 @@ export const api = {
   viewPrescriptionForDoctor: (patientId, prescriptionId) =>
     request(`/doctor/patients/${patientId}/prescriptions/${prescriptionId}`),
 
-  fetchPrescriptionFileForDoctor: (patientId, prescriptionId) =>
-    fetchFile(`/doctor/patients/${patientId}/prescriptions/${prescriptionId}/download`),
+  // Each view needs the patient's approval, and is used up once opened.
+  requestPrescriptionViewForDoctor: (patientId, prescriptionId) =>
+    request(`/doctor/patients/${patientId}/prescriptions/${prescriptionId}/view-requests`, { method: "POST" }).then((r) => r.request),
 
-  downloadPrescriptionForDoctor: (patientId, prescriptionId, filename) =>
-    downloadFile(`/doctor/patients/${patientId}/prescriptions/${prescriptionId}/download`, filename),
+  // Patient: doctors asking to view a prescription.
+  getPrescriptionViewRequests: () =>
+    request("/patients/me/prescription-view-requests").then((r) => r.requests || []),
+
+  decidePrescriptionViewRequest: (requestId, decision) =>
+    request(`/patients/me/prescription-view-requests/${requestId}/decision`, {
+      method: "POST",
+      body: { decision },
+    }).then((r) => r.request),
 
   downloadPatientPrescription: (prescriptionId, filename) =>
     downloadFile(`/patients/me/prescriptions/${prescriptionId}/download`, filename),

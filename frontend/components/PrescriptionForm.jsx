@@ -6,16 +6,22 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "../lib/api";
 import { FieldError, scrollToField } from "./FieldError";
+import { toast } from "./Toast";
 
-const EMPTY_MED = { name: "", dose: "", frequency: "", duration: "", instructions: "" };
+const EMPTY_MED = { name: "", dose: "", frequency: "", duration: "", quantity: "", instructions: "" };
 const MED_FIELDS = [
   { id: "name", label: "Medicine", placeholder: "e.g. Amoxicillin" },
   { id: "dose", label: "Dose", placeholder: "500 mg" },
   { id: "frequency", label: "How often", placeholder: "Three times a day" },
   { id: "duration", label: "For how long", placeholder: "5 days" },
+  { id: "quantity", label: "Total to give", placeholder: "e.g. 15", numeric: true },
   { id: "instructions", label: "Instructions (optional)", placeholder: "After food" },
 ];
-const EMPTY = { title: "", diagnosis: "", symptoms: "", notes: "", followUp: "" };
+const EMPTY = { title: "", diagnosis: "", symptoms: "", notes: "", followUp: "", followUpDate: "" };
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 
 export default function PrescriptionForm({ patientId, patient }) {
   const [approval, setApproval] = useState(undefined);
@@ -73,9 +79,11 @@ export default function PrescriptionForm({ patientId, patient }) {
     setBusy(true);
     try {
       await api.requestPrescriptionApproval(patientId);
+      toast.success("Request sent. The form opens once the patient approves.");
       await loadApproval();
     } catch (err) {
       setError(err.message || "Couldn't send the request.");
+      toast.error(err.message || "Couldn't send the request.");
     } finally {
       setBusy(false);
     }
@@ -91,10 +99,11 @@ export default function PrescriptionForm({ patientId, patient }) {
     if (!filled.some(Boolean)) errs["med-0-name"] = "Add at least one medicine.";
     medications.forEach((m, i) => {
       if (!filled[i]) return;
-      for (const f of ["name", "dose", "frequency", "duration"]) {
+      for (const f of ["name", "dose", "frequency", "duration", "quantity"]) {
         if (!m[f].trim()) errs[`med-${i}-${f}`] = "Required";
       }
     });
+    if (fields.followUpDate && fields.followUpDate < today()) errs.followUpDate = "The follow-up date can't be in the past.";
     if (!password) errs.password = "Enter your password to confirm the prescription.";
     setFieldErrors(errs);
     if (Object.keys(errs).length) return scrollToField(Object.keys(errs));
@@ -105,20 +114,23 @@ export default function PrescriptionForm({ patientId, patient }) {
         patientId,
         approvalId: approval.id,
         title: fields.title.trim(),
-        medications: meds.map((m) => ({ ...m, instructions: m.instructions.trim() || undefined })),
+        medications: meds.map((m) => ({ ...m, quantity: Number(m.quantity), instructions: m.instructions.trim() || undefined })),
         diagnosis: fields.diagnosis.trim(),
         symptoms: fields.symptoms.trim(),
         notes: fields.notes.trim(),
         followUp: fields.followUp.trim(),
+        followUpDate: fields.followUpDate,
         password,
       });
       setIssued(result);
+      toast.success("Prescription saved.");
       setPassword("");
       setMedications([{ ...EMPTY_MED }]);
       setFields(EMPTY);
       await loadApproval();
     } catch (err) {
       setFieldErrors({ submit: err.message || "Couldn't save this prescription." });
+      toast.error(err.message || "Couldn't save this prescription.");
       scrollToField("submit");
     } finally {
       setBusy(false);
@@ -167,6 +179,9 @@ export default function PrescriptionForm({ patientId, patient }) {
           </div>
 
           <label style={{ fontSize: 12.5, fontWeight: 600 }}>Medicines</label>
+          <div className="field-hint" style={{ marginTop: 2 }}>
+            “Total to give” is the number of tablets, capsules or bottles. The pharmacy uses it to track what it has given and what is left.
+          </div>
           {medications.map((med, index) => (
             <div key={index} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, alignItems: "start", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
               {MED_FIELDS.map((f) => (
@@ -174,7 +189,15 @@ export default function PrescriptionForm({ patientId, patient }) {
                   <label htmlFor={`med-${index}-${f.id}`} style={{ fontSize: 12 }}>
                     {f.label}
                   </label>
-                  <input id={`med-${index}-${f.id}`} data-field={`med-${index}-${f.id}`} value={med[f.id]} placeholder={f.placeholder} maxLength={f.id === "instructions" ? 500 : 200} onChange={(e) => updateMed(index, f.id, e.target.value)} />
+                  <input
+                    id={`med-${index}-${f.id}`}
+                    data-field={`med-${index}-${f.id}`}
+                    value={med[f.id]}
+                    placeholder={f.placeholder}
+                    inputMode={f.numeric ? "numeric" : undefined}
+                    maxLength={f.numeric ? 5 : f.id === "instructions" ? 500 : 200}
+                    onChange={(e) => updateMed(index, f.id, f.numeric ? e.target.value.replace(/\D/g, "").replace(/^0+/, "") : e.target.value)}
+                  />
                   <FieldError message={fieldErrors[`med-${index}-${f.id}`]} />
                 </div>
               ))}
@@ -202,8 +225,14 @@ export default function PrescriptionForm({ patientId, patient }) {
             <textarea id="rx-notes" rows={2} maxLength={2000} value={fields.notes} onChange={(e) => set("notes", e.target.value)} />
           </div>
           <div className="field">
-            <label htmlFor="rx-follow">Follow-up (optional)</label>
-            <input id="rx-follow" maxLength={500} value={fields.followUp} onChange={(e) => set("followUp", e.target.value)} placeholder="e.g. Review in 5 days" />
+            <label htmlFor="rx-follow-date">Follow-up date (optional)</label>
+            <input id="rx-follow-date" data-field="followUpDate" type="date" min={today()} value={fields.followUpDate} onChange={(e) => set("followUpDate", e.target.value)} />
+            <div className="field-hint">The patient is reminded of this date in their portal.</div>
+            <FieldError message={fieldErrors.followUpDate} />
+          </div>
+          <div className="field">
+            <label htmlFor="rx-follow">Follow-up note (optional)</label>
+            <input id="rx-follow" maxLength={500} value={fields.followUp} onChange={(e) => set("followUp", e.target.value)} placeholder="e.g. Bring your blood test results" />
             <div className="field-hint">The pharmacy sees the medicines only, never the diagnosis, symptoms or advice.</div>
           </div>
           <div className="field">

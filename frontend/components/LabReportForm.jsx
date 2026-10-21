@@ -8,11 +8,13 @@ import { api } from "../lib/api";
 import { REPORT_TYPES } from "./DiagnosisRecord";
 import { ACCEPT_ATTR, FILE_HINT, validateFile } from "../lib/fileRules";
 import { FieldError, scrollToField } from "./FieldError";
+import { toast } from "./Toast";
 
 export default function LabReportForm({ patientId, patient }) {
   const [approval, setApproval] = useState(undefined);
   const [category, setCategory] = useState(REPORT_TYPES[0].id);
   const [title, setTitle] = useState("");
+  const [otherType, setOtherType] = useState("");
   const [findings, setFindings] = useState("");
   const [file, setFile] = useState(null);
   const [password, setPassword] = useState("");
@@ -48,9 +50,11 @@ export default function LabReportForm({ patientId, patient }) {
     setBusy(true);
     try {
       await api.requestRecordCreation(patientId);
+      toast.success("Request sent. The form opens once the patient approves.");
       await loadApproval();
     } catch (err) {
       setError(err.message || "Couldn't send the request.");
+      toast.error(err.message || "Couldn't send the request.");
     } finally {
       setBusy(false);
     }
@@ -72,12 +76,20 @@ export default function LabReportForm({ patientId, patient }) {
     setFile(problem ? null : chosen);
   }
 
+  function reportForm() {
+    const form = {};
+    if (findings.trim()) form.findings = findings.trim();
+    if (category === "other" && otherType.trim()) form.reportType = otherType.trim();
+    return Object.keys(form).length ? form : null;
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
     // Each problem is shown under its own field; the page scrolls to the first.
     const errs = {};
     if (!title.trim()) errs.title = "Enter a title for the report.";
+    if (category === "other" && !otherType.trim()) errs.otherType = "Name the type of report.";
     if (!file) errs.file = fieldErrors.file || "Choose the report file to upload.";
     if (!password) errs.password = "Enter your password to confirm the report.";
     setFieldErrors(errs);
@@ -89,18 +101,21 @@ export default function LabReportForm({ patientId, patient }) {
         approvalId: approval.id,
         title: title.trim(),
         category,
-        form: findings.trim() ? { findings: findings.trim() } : null,
+        form: reportForm(),
         file,
         password,
       });
       setSaved(record);
+      toast.success("Lab report saved.");
       setPassword("");
       setFindings("");
+      setOtherType("");
       setFile(null);
       setTitle("");
       await loadApproval();
     } catch (err) {
       setFieldErrors({ submit: err.message || "Couldn't save the report." });
+      toast.error(err.message || "Couldn't save the report.");
       scrollToField("submit");
     } finally {
       setBusy(false);
@@ -159,6 +174,23 @@ export default function LabReportForm({ patientId, patient }) {
               ))}
             </select>
           </div>
+          {category === "other" && (
+            <div className="field">
+              <label htmlFor="report-other-type">Specify the report type</label>
+              <input
+                id="report-other-type"
+                data-field="otherType"
+                maxLength={200}
+                value={otherType}
+                onChange={(e) => {
+                  clearFieldError("otherType");
+                  setOtherType(e.target.value);
+                }}
+                placeholder="e.g. ECG, discharge summary, vaccination card"
+              />
+              <FieldError message={fieldErrors.otherType} />
+            </div>
+          )}
           <div className="field">
             <label htmlFor="report-file">Report file</label>
             <input id="report-file" data-field="file" type="file" accept={ACCEPT_ATTR} onChange={chooseFile} />

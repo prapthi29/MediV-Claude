@@ -16,7 +16,9 @@ export const DIAGNOSIS_FORM_FIELDS = [
   'findings',
   'treatmentPlan',
   'followUp',
-  'notes'
+  'notes',
+  // The doctor's own name for an "Other document" report.
+  'reportType'
 ];
 
 function sha256Hex(buffer) {

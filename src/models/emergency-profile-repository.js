@@ -110,25 +110,34 @@ export class EmergencyProfileRepository {
       if (!profileResult.rows[0]) {
         throw new AppError(
           404,
-          'Emergency medical profile not found.',
+          'Basic profile not found.',
           'EMERGENCY_PROFILE_NOT_FOUND'
         );
       }
 
+      const ids = {
+        requestId: approvalRequestId,
+        patientUserId,
+        doctorUserId
+      };
+
+      // A view approval is used up here. An edit approval lets the doctor
+      // load the current profile to edit and is used up only on save.
       const consumed =
         await this.emergencyProfileAccessRequestRepository?.consumeApproved(
           client,
-          {
-            requestId: approvalRequestId,
-            patientUserId,
-            doctorUserId,
-            operation: 'view'
-          }
+          { ...ids, operation: 'view' }
         );
+      const canEdit =
+        !consumed &&
+        (await this.emergencyProfileAccessRequestRepository?.isApproved({
+          ...ids,
+          operation: 'update'
+        }));
 
-      if (!consumed) {
+      if (!consumed && !canEdit) {
         throw approvalRequired(
-          'Patient approval to view the emergency profile is required.'
+          'Patient approval to view the basic profile is required.'
         );
       }
 
@@ -188,7 +197,7 @@ export class EmergencyProfileRepository {
       if (existing.rows.length) {
         throw new AppError(
           409,
-          'Emergency profile already exists. Use the update operation.',
+          'This patient already has a basic profile. Ask to edit it instead.',
           'EMERGENCY_PROFILE_EXISTS'
         );
       }
@@ -353,7 +362,7 @@ export class EmergencyProfileRepository {
       if (!current) {
         throw new AppError(
           404,
-          'Create the initial emergency profile first.',
+          'Create the basic profile first.',
           'EMERGENCY_PROFILE_NOT_FOUND'
         );
       }

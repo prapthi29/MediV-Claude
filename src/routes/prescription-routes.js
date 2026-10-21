@@ -48,7 +48,8 @@ export function createDoctorPrescriptionRouter(
   // A linked doctor can read the patient's prescriptions.
   router.get("/patients/:patientId/prescriptions", authenticate(authService), authorize("doctor"), controller.listForDoctor);
   router.get("/patients/:patientId/prescriptions/:prescriptionId", authenticate(authService), authorize("doctor"), controller.viewForDoctor);
-  router.get("/patients/:patientId/prescriptions/:prescriptionId/download", authenticate(authService), authorize("doctor"), controller.downloadForDoctor);
+  // Opening one needs the patient's approval; doctors cannot download.
+  router.post("/patients/:patientId/prescriptions/:prescriptionId/view-requests", authenticate(authService), authorize("doctor"), controller.requestViewForDoctor);
 
   return router;
 }
@@ -109,6 +110,9 @@ export function createPatientPrescriptionRouter(
   router.post("/me/prescription-requests/:requestId/revoke", authenticate(authService), authorize("patient"), controller.revoke);
 
   router.get("/me/prescription-shares", authenticate(authService), authorize("patient"), controller.listSharesForPatient);
+  router.get("/me/pharmacies/:licenseId", authenticate(authService), authorize("patient"), controller.findPharmacy);
+  router.get("/me/prescription-view-requests", authenticate(authService), authorize("patient"), controller.listViewRequestsForPatient);
+  router.post("/me/prescription-view-requests/:requestId/decision", authenticate(authService), authorize("patient"), controller.decideViewRequest);
   router.post("/me/prescription-shares/:shareId/revoke", authenticate(authService), authorize("patient"), controller.revokeShare);
   router.post("/me/prescriptions/:prescriptionId/shares", authenticate(authService), authorize("patient"), controller.share);
 

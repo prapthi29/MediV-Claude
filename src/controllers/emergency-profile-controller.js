@@ -2,11 +2,17 @@
 import { z } from 'zod';
 import { asyncHandler } from '../utils/async-handler.js';
 import { AppError } from '../utils/app-error.js';
+import { phoneProblem } from '../utils/phone.js';
 
 const text = (max) => z.string().trim().min(1).max(max);
 const optionalText = (max) => z.string().trim().max(max).nullable().optional();
 
 const status = z.enum(['unknown', 'none_known', 'provided']);
+
+const phone = z.string().trim().superRefine((value, ctx) => {
+  const problem = phoneProblem(value);
+  if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
+});
 
 const allergySchema = z.object({
   substance: text(200),
@@ -37,7 +43,7 @@ const profileFields = {
     'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'
   ]).nullable().optional(),
   emergencyContactName: optionalText(200),
-  emergencyContactPhone: optionalText(30),
+  emergencyContactPhone: phone.nullable().optional(),
   emergencyContactRelationship: optionalText(100),
   allergies: z.array(allergySchema).max(100).optional(),
   allergiesStatus: status.optional(),
@@ -53,7 +59,7 @@ const createSchema = z.object({
   dateOfBirth,
   bloodGroup: profileFields.bloodGroup.unwrap().unwrap(),
   emergencyContactName: text(200),
-  emergencyContactPhone: text(30),
+  emergencyContactPhone: phone,
   password,
   allergies: z.array(allergySchema).max(100),
   allergiesStatus: status,

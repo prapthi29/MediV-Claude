@@ -31,7 +31,9 @@ export const FORM_FIELDS = [
   { id: "notes", label: "Notes", rows: 2 },
 ];
 
-export function typeLabel(id) {
+// form.reportType is the doctor's own name for an "Other document".
+export function typeLabel(id, form) {
+  if (id === "other" && form?.reportType) return form.reportType;
   return RECORD_TYPES.find((t) => t.id === id)?.label || id || "—";
 }
 
@@ -82,7 +84,7 @@ export function saveRecordPdf(view) {
   const { record, form, attachment, integrity } = view;
   const blocks = [
     { type: "title", text: record.title || "Medical record" },
-    { type: "row", label: "Type", text: typeLabel(record.category) },
+    { type: "row", label: "Type", text: typeLabel(record.category, form) },
     { type: "row", label: "Doctor", text: record.doctorName || "-" },
     { type: "row", label: "Version", text: String(record.version ?? 1) },
     { type: "row", label: "Date", text: record.createdAt ? new Date(record.createdAt).toLocaleString() : "-" },
@@ -94,9 +96,9 @@ export function saveRecordPdf(view) {
   saveBlob(makeTextPdf(blocks), safeFilename(record.title || "medical-record", "pdf"));
 }
 
-// The attached file with "View file" (shown inline in the page) and
-// "Download". loadFile returns the file as a Blob.
-export function AttachmentPanel({ attachment, loadFile, autoOpen = false }) {
+// The attached file with "View file" (shown inline in the page) and, for
+// the patient only, "Download". loadFile returns the file as a Blob.
+export function AttachmentPanel({ attachment, loadFile, autoOpen = false, canDownload = false }) {
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -153,9 +155,11 @@ export function AttachmentPanel({ attachment, loadFile, autoOpen = false }) {
             <button type="button" className="btn btn-ghost btn-sm" onClick={toggleView} disabled={busy}>
               {busy ? "Opening…" : preview ? "Hide file" : "View file"}
             </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={download}>
-              Download
-            </button>
+            {canDownload && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={download}>
+                Download
+              </button>
+            )}
           </span>
         )}
       </p>
@@ -165,10 +169,10 @@ export function AttachmentPanel({ attachment, loadFile, autoOpen = false }) {
           {isImage ? (
             <img src={preview.url} alt={attachment.filename} />
           ) : isPdf ? (
-            <iframe src={preview.url} title={attachment.filename} />
+            <iframe src={canDownload ? preview.url : `${preview.url}#toolbar=0`} title={attachment.filename} />
           ) : (
             <p style={{ padding: 14, margin: 0 }}>
-              This file type can't be shown here. Use Download to open it.
+              This file type can't be shown here.{canDownload ? " Use Download to open it." : ""}
             </p>
           )}
         </div>
@@ -178,17 +182,17 @@ export function AttachmentPanel({ attachment, loadFile, autoOpen = false }) {
 }
 
 // view = { record, form, attachment, integrity } as returned by the API.
-export function RecordView({ view, loadFile, autoOpenFile = false }) {
+export function RecordView({ view, loadFile, autoOpenFile = false, canDownload = false }) {
   const { record, form, attachment, integrity } = view;
   return (
     <div>
       <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap", marginBottom: 6 }}>
         <h3 style={{ margin: 0, fontSize: 16 }}>{record.title || "Medical record"}</h3>
         <span style={{ color: "var(--muted)", fontSize: 12.5 }}>
-          {typeLabel(record.category)} · version {record.version}
+          {typeLabel(record.category, form)} · version {record.version}
           {record.doctorName ? ` · by ${record.doctorName}` : ""}
         </span>
-        {form && (
+        {form && canDownload && (
           <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }} onClick={() => saveRecordPdf(view)}>
             Download record (PDF)
           </button>
@@ -206,7 +210,7 @@ export function RecordView({ view, loadFile, autoOpenFile = false }) {
         </dl>
       ) : null}
       {attachment ? (
-        <AttachmentPanel key={record.id} attachment={attachment} loadFile={loadFile} autoOpen={autoOpenFile} />
+        <AttachmentPanel key={record.id} attachment={attachment} loadFile={loadFile} autoOpen={autoOpenFile} canDownload={canDownload} />
       ) : (
         !form && <p style={{ color: "var(--muted)" }}>This record is empty.</p>
       )}

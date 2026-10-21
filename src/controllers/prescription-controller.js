@@ -8,7 +8,8 @@ const medication = z.object({
   dose: text(100),
   frequency: text(100),
   duration: text(100),
-  instructions: z.string().trim().max(500).optional()
+  instructions: z.string().trim().max(500).optional(),
+  quantity: z.number().int().min(1).max(10000).optional()
 }).strict();
 const createBody = z.object({
   patientId,
@@ -18,6 +19,9 @@ const createBody = z.object({
   diagnosis: z.string().trim().max(2000).optional(),
   symptoms: z.string().trim().max(2000).optional(),
   followUp: z.string().trim().max(500).optional(),
+  followUpDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.')
+    .refine((value) => !Number.isNaN(Date.parse(value)), 'Enter a valid date.')
+    .optional(),
   notes: z.string().trim().max(2000).optional(),
   password: z.string().min(1).max(128)
 }).strict();
@@ -27,7 +31,12 @@ const patientPrescriptionParams = z.object({ patientId, prescriptionId: z.string
 const requestParams = z.object({ requestId: z.string().uuid() });
 const shareParams = z.object({ shareId: z.string().uuid() });
 const shareBody = z.object({ pharmacyLicenseId: z.string().trim().min(1).max(100) }).strict();
-const dispenseBody = z.object({ password: z.string().min(1).max(128) }).strict();
+const dispenseBody = z.object({
+  password: z.string().min(1).max(128),
+  quantities: z.array(z.number().int().min(0).max(10000)).min(1).max(20)
+}).strict();
+const pharmacyParams = z.object({ licenseId: z.string().trim().min(1).max(100) });
+const decisionBody = z.object({ decision: z.enum(['approved', 'rejected', 'revoked']) }).strict();
 
 export function createPrescriptionController(prescriptionService) {
   const decide = (decision) => asyncHandler(async (req, res) => {
@@ -77,12 +86,21 @@ export function createPrescriptionController(prescriptionService) {
       const { patientId: pid, prescriptionId: id } = patientPrescriptionParams.parse(req.params);
       res.json(await prescriptionService.viewForDoctor(req.user.sub, pid, id));
     }),
-    downloadForDoctor: asyncHandler(async (req, res) => {
+    requestViewForDoctor: asyncHandler(async (req, res) => {
       const { patientId: pid, prescriptionId: id } = patientPrescriptionParams.parse(req.params);
-      const { prescription, body } = await prescriptionService.downloadForDoctor(req.user.sub, pid, id);
-      res.type(prescription.contentType || 'application/octet-stream');
-      res.attachment(prescription.originalFilename || 'prescription');
-      res.send(body);
+      res.status(201).json({ request: await prescriptionService.requestViewForDoctor(req.user.sub, pid, id) });
+    }),
+    listViewRequestsForPatient: asyncHandler(async (req, res) => {
+      res.json({ requests: await prescriptionService.listViewRequestsForPatient(req.user.sub) });
+    }),
+    decideViewRequest: asyncHandler(async (req, res) => {
+      const { requestId } = requestParams.parse(req.params);
+      const { decision } = decisionBody.parse(req.body);
+      res.json({ request: await prescriptionService.decideViewRequest(req.user.sub, requestId, decision) });
+    }),
+    findPharmacy: asyncHandler(async (req, res) => {
+      const { licenseId } = pharmacyParams.parse(req.params);
+      res.json({ pharmacy: await prescriptionService.findPharmacy(licenseId) });
     }),
     pharmacyHistory: asyncHandler(async (req, res) => {
       res.json({ history: await prescriptionService.listPharmacyHistory(req.user.sub) });
@@ -108,8 +126,8 @@ export function createPrescriptionController(prescriptionService) {
     }),
     dispense: asyncHandler(async (req, res) => {
       const { shareId } = shareParams.parse(req.params);
-      const { password } = dispenseBody.parse(req.body);
-      res.json({ dispensed: await prescriptionService.dispense(req.user.sub, shareId, password) });
+      const { password, quantities } = dispenseBody.parse(req.body);
+      res.json({ dispensed: await prescriptionService.dispense(req.user.sub, shareId, password, quantities) });
     })
   };
 }

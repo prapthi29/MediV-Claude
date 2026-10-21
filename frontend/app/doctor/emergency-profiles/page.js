@@ -4,6 +4,10 @@
 import { useCallback, useEffect, useState } from "react";
 import PortalShell from "../../../components/PortalShell";
 import { FieldError, scrollToField } from "../../../components/FieldError";
+import BasicProfileView from "../../../components/BasicProfileView";
+import PhoneInput from "../../../components/PhoneInput";
+import { toast } from "../../../components/Toast";
+import { phoneProblem } from "../../../lib/phone";
 import { EmptyState, fmtDate } from "../../../components/ui";
 import { api } from "../../../lib/api";
 
@@ -14,11 +18,11 @@ const EMPTY = {
   emergencyContactName: "",
   emergencyContactPhone: "",
   emergencyContactRelationship: "",
-  allergiesStatus: "unknown",
+  allergiesStatus: "none_known",
   allergies: [],
-  chronicConditionsStatus: "unknown",
+  chronicConditionsStatus: "none_known",
   chronicConditions: [],
-  medicationsStatus: "unknown",
+  medicationsStatus: "none_known",
   currentMedications: [],
 };
 
@@ -60,11 +64,13 @@ function IntegrityNote({ profile }) {
     </div>
   );
 }
+// "Unknown" and "None known" meant the same thing, so older "unknown"
+// values are shown and saved as "None as of now".
 const STATUSES = [
-  { value: "unknown", label: "Unknown" },
-  { value: "none_known", label: "None known" },
+  { value: "none_known", label: "None as of now" },
   { value: "provided", label: "Provided" },
 ];
+const statusOf = (value) => (value === "provided" ? "provided" : "none_known");
 
 const requestIdOf = (item) =>
   item?.id || item?.requestId || item?.request_id;
@@ -88,11 +94,11 @@ function toForm(profile) {
     emergencyContactName: contact.name || "",
     emergencyContactPhone: contact.phone || "",
     emergencyContactRelationship: contact.relationship || "",
-    allergiesStatus: profile?.allergiesStatus || "unknown",
+    allergiesStatus: statusOf(profile?.allergiesStatus),
     allergies: profile?.allergies || [],
-    chronicConditionsStatus: profile?.chronicConditionsStatus || "unknown",
+    chronicConditionsStatus: statusOf(profile?.chronicConditionsStatus),
     chronicConditions: profile?.chronicConditions || [],
-    medicationsStatus: profile?.medicationsStatus || "unknown",
+    medicationsStatus: statusOf(profile?.medicationsStatus),
     currentMedications: profile?.currentMedications || [],
   };
 }
@@ -263,6 +269,15 @@ function ListEditor({
   );
 }
 
+function InlineNote({ value }) {
+  if (!value) return null;
+  return (
+    <div className={value.kind === "error" ? "error-text field-error" : "inline-note"} role={value.kind === "error" ? "alert" : "status"}>
+      {value.text}
+    </div>
+  );
+}
+
 export default function DoctorEmergencyProfiles() {
   const [patients, setPatients] = useState(null);
   const [patientId, setPatientId] = useState("");
@@ -278,9 +293,10 @@ export default function DoctorEmergencyProfiles() {
   const [saving, setSaving] = useState(false);
   const [activeApproval, setActiveApproval] = useState(null);
   const [creating, setCreating] = useState(false);
-  const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
-  const [notice, setNotice] = useState("");
+  // Results shown next to the button that caused them, keyed by that button.
+  const [notes, setNotes] = useState({});
+  const note = (key, kind, text) => setNotes((n) => ({ ...n, [key]: { kind, text } }));
 
   useEffect(() => {
     let active = true;
@@ -293,7 +309,7 @@ export default function DoctorEmergencyProfiles() {
       .catch((err) => {
         if (active) {
           setPatients([]);
-          setError(err.message || "Unable to load patients.");
+          toast.error(err.message || "Unable to load patients.");
         }
       });
 
@@ -316,7 +332,7 @@ export default function DoctorEmergencyProfiles() {
 
       setPermissionRequests(Array.isArray(requests) ? requests : []);
     } catch (err) {
-      setError(
+      toast.error(
         err.message || "Unable to load basic profile permission requests."
       );
     } finally {
@@ -327,8 +343,6 @@ export default function DoctorEmergencyProfiles() {
   async function requestPermission(operation) {
     if (!patientId) return;
 
-    setError("");
-    setNotice("");
     setRequesting(operation);
 
     try {
@@ -337,9 +351,9 @@ export default function DoctorEmergencyProfiles() {
         operation
       );
 
-      setNotice(
-        `Permission to ${operationLabel(operation).toLowerCase()} requested. The patient must approve it before you can proceed.`
-      );
+      const sent = `Request sent. ${operationLabel(operation)} can be used once the patient approves.`;
+      note("request", "ok", sent);
+      toast.success(sent);
 
       await loadRequests(patientId);
 
@@ -353,7 +367,8 @@ export default function DoctorEmergencyProfiles() {
         });
       }
     } catch (err) {
-      setError(err.message || "Unable to request permission.");
+      note("request", "error", err.message || "Unable to request permission.");
+      toast.error(err.message || "Unable to request permission.");
     } finally {
       setRequesting("");
     }
@@ -365,11 +380,11 @@ export default function DoctorEmergencyProfiles() {
     setForm(EMPTY);
     setAudit([]);
     setReason("");
-    setError("");
-    setNotice("");
     setCreating(false);
     setActiveApproval(null);
     setPermissionRequests([]);
+    setNotes({});
+    setFieldErrors({});
 
     if (!id) return;
 
@@ -379,86 +394,53 @@ export default function DoctorEmergencyProfiles() {
   async function useApprovedRequest(request) {
     const approvalRequestId = requestIdOf(request);
     const operation = String(request.operation || "").toLowerCase();
+    const fail = (text) => {
+      note(approvalRequestId, "error", text);
+      toast.error(text);
+    };
 
-    if (!approvalRequestId) {
-      setError("The approved request has no valid ID. Refresh and try again.");
+    if (!approvalRequestId || requestStatusOf(request) !== "approved" || !["view", "create", "update"].includes(operation)) {
+      fail("This permission can't be used. Refresh the requests and try again.");
       return;
     }
 
-    if (requestStatusOf(request) !== "approved") {
-      setError("This permission request has not been approved.");
-      return;
-    }
-
-    if (!["view", "create", "update"].includes(operation)) {
-      setError("The permission request has an unsupported operation.");
-      return;
-    }
-
-    setError("");
-    setNotice("");
+    setNotes({});
+    setFieldErrors({});
     setLoadingProfile(true);
     setActiveApproval(null);
 
     try {
       if (operation === "view") {
-        const result = await api.getPatientEmergencyProfile(
-          patientId,
-          approvalRequestId
-        );
-
+        const result = await api.getPatientEmergencyProfile(patientId, approvalRequestId);
         setProfile(result);
         setForm(toForm(result));
         setCreating(false);
-        setNotice("Basic profile loaded using approved view permission.");
-
+        toast.success("Basic profile opened.");
+        // The view approval is used up now.
+        loadRequests(patientId);
         try {
-          const history = await api.getPatientEmergencyProfileAudit(
-            patientId,
-            approvalRequestId
-          );
-          setAudit(history || []);
+          setAudit((await api.getPatientEmergencyProfileAudit(patientId, approvalRequestId)) || []);
         } catch {
           setAudit([]);
         }
       } else if (operation === "create") {
-        if (profile) {
-          setNotice(
-            "A profile is already loaded. Use a separate approved update request to edit it."
-          );
-        } else {
-          setForm(EMPTY);
-          setCreating(true);
-          setNotice(
-            "Fill in the basic profile. The approved create permission will be used when you save."
-          );
-          setActiveApproval({
-            id: approvalRequestId,
-            operation,
-          });
-        }
+        setForm(EMPTY);
+        setCreating(true);
+        setActiveApproval({ id: approvalRequestId, operation });
+        toast.success("Fill in the basic profile below and save it.");
+        scrollToField("gender");
       } else {
-        if (!profile) {
-          setError(
-            "Load the existing profile using an approved view request first, then use an approved update request."
-          );
-        } else {
-          setForm(toForm(profile));
-          setCreating(false);
-          setNotice(
-            "Edit the profile. The approved update permission will be used when you save."
-          );
-          setActiveApproval({
-            id: approvalRequestId,
-            operation,
-          });
-        }
+        // An approved edit loads the current profile without using up the approval.
+        const current = await api.getPatientEmergencyProfile(patientId, approvalRequestId);
+        setProfile(current);
+        setForm(toForm(current));
+        setCreating(false);
+        setActiveApproval({ id: approvalRequestId, operation });
+        toast.success("Make your changes below and save them.");
+        scrollToField("gender");
       }
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to use this approved permission. It may have expired or already been used."
-      );
+      fail(err.message || "Unable to use this permission. It may have expired or already been used.");
       await loadRequests(patientId);
     } finally {
       setLoadingProfile(false);
@@ -541,6 +523,9 @@ export default function DoctorEmergencyProfiles() {
         add("emergencyContactPhone", "Enter the emergency contact's phone number.");
       }
     }
+    if (form.emergencyContactPhone && phoneProblem(form.emergencyContactPhone)) {
+      add("emergencyContactPhone", phoneProblem(form.emergencyContactPhone));
+    }
     if (form.dateOfBirth && form.dateOfBirth > new Date().toISOString().slice(0, 10)) {
       add("dateOfBirth", "Date of birth cannot be in the future.");
     }
@@ -555,8 +540,6 @@ export default function DoctorEmergencyProfiles() {
   }
 
   async function saveProfile() {
-    setError("");
-    setNotice("");
 
     const errs = validateForm();
     setFieldErrors(errs);
@@ -608,7 +591,7 @@ export default function DoctorEmergencyProfiles() {
       setReason("");
       setPassword("");
       setActiveApproval(null);
-      setNotice("Basic profile saved.");
+      toast.success("Basic profile saved.");
       setPatients((list) =>
         (list || []).map((p) =>
           (p.patientUserId || p.id) === patientId ? { ...p, hasBasicProfile: true } : p
@@ -625,6 +608,7 @@ export default function DoctorEmergencyProfiles() {
       await loadRequests(patientId);
     } catch (err) {
       setFieldErrors({ submit: err.message || "Unable to save the basic profile." });
+      toast.error(err.message || "Unable to save the basic profile.");
     } finally {
       setSaving(false);
     }
@@ -643,9 +627,16 @@ export default function DoctorEmergencyProfiles() {
     (item) => requestStatusOf(item) === "pending"
   );
 
+  // Only permissions that still fit this patient are shown.
   const approvedRequests = permissionRequests.filter(
-    (item) => requestStatusOf(item) === "approved"
+    (item) => requestStatusOf(item) === "approved" && allowedOperations.includes(String(item.operation).toLowerCase())
   );
+
+  // Once a request is waiting or approved, asking again is not offered.
+  const openOperations = new Set(
+    [...pendingRequests, ...approvedRequests].map((item) => String(item.operation).toLowerCase())
+  );
+  const askOperations = allowedOperations.filter((operation) => !openOperations.has(operation));
 
   return (
     <PortalShell
@@ -654,22 +645,6 @@ export default function DoctorEmergencyProfiles() {
       title="Basic profiles"
       subtitle="Request patient permission before viewing, creating, or updating a patient's basic profile."
     >
-      {error && (
-        <div
-          className="card card-pad"
-          role="alert"
-          style={{ marginBottom: 16, color: "var(--danger, #dc2626)" }}
-        >
-          {error}
-        </div>
-      )}
-
-      {notice && (
-        <div className="card card-pad" role="status" style={{ marginBottom: 16 }}>
-          {notice}
-        </div>
-      )}
-
       <section className="card card-pad" style={{ marginBottom: 20 }}>
         <label
           htmlFor="emergency-patient"
@@ -717,13 +692,15 @@ export default function DoctorEmergencyProfiles() {
 
             <h3>Request permission</h3>
             <p>
-              {hasProfile
-                ? "This patient already has a basic profile. Ask to view or edit it; each needs the patient's approval."
-                : "This patient has no basic profile yet. Ask the patient's approval to create one."}
+              {askOperations.length === 0
+                ? "Your request is with the patient. Its status is shown below."
+                : hasProfile
+                  ? "This patient already has a basic profile. Ask to view or edit it; each needs the patient's approval."
+                  : "This patient has no basic profile yet. Ask the patient's approval to create one."}
             </p>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {allowedOperations.map((operation) => (
+              {askOperations.map((operation) => (
                 <button
                   key={operation}
                   type="button"
@@ -737,6 +714,7 @@ export default function DoctorEmergencyProfiles() {
                 </button>
               ))}
             </div>
+            <InlineNote value={notes.request} />
           </>
         )}
       </section>
@@ -788,9 +766,8 @@ export default function DoctorEmergencyProfiles() {
           {approvedRequests.length > 0 && (
             <>
               <h4>Approved permissions</h4>
-              <p>
-                Use an approved permission for its matching operation. The
-                backend may reject permissions that have already been used.
+              <p style={{ color: "var(--muted)", fontSize: 13 }}>
+                Each approval can be used once.
               </p>
 
               {approvedRequests.map((item, index) => (
@@ -814,8 +791,9 @@ export default function DoctorEmergencyProfiles() {
                     disabled={loadingProfile || saving}
                     onClick={() => useApprovedRequest(item)}
                   >
-                    Use approved permission
+                    {operationLabel(item.operation)}
                   </button>
+                  <InlineNote value={notes[requestIdOf(item)]} />
                 </div>
               ))}
             </>
@@ -824,10 +802,17 @@ export default function DoctorEmergencyProfiles() {
       )}
 
       {loadingProfile && (
-        <div className="card card-pad">Using approved permission...</div>
+        <div className="card card-pad">Opening...</div>
       )}
 
-      {patientId && !loadingProfile && (profile || creating) && (
+      {patientId && !loadingProfile && profile && !activeApproval && (
+        <section className="card card-pad" style={{ marginBottom: 20 }}>
+          <h3 style={{ marginTop: 0 }}>Basic profile</h3>
+          <BasicProfileView profile={profile} />
+        </section>
+      )}
+
+      {patientId && !loadingProfile && activeApproval && (
         <>
           <section className="card card-pad" style={{ marginBottom: 16 }}>
             <h3 style={{ marginTop: 0 }}>
@@ -899,9 +884,18 @@ export default function DoctorEmergencyProfiles() {
               <FieldError message={fieldErrors.bloodGroup} />
             </label>
 
+            <label style={{ display: "block", marginBottom: 12 }}>
+              Emergency contact phone
+              <PhoneInput
+                value={form.emergencyContactPhone}
+                dataField="emergencyContactPhone"
+                onChange={(value) => setField("emergencyContactPhone", value)}
+              />
+              <FieldError message={fieldErrors.emergencyContactPhone} />
+            </label>
+
             {[
               ["emergencyContactName", "Emergency contact name"],
-              ["emergencyContactPhone", "Emergency contact phone"],
               [
                 "emergencyContactRelationship",
                 "Relationship (optional)",
@@ -915,7 +909,7 @@ export default function DoctorEmergencyProfiles() {
                 <input
                   className="input"
                   value={form[key]}
-                  maxLength={key === "emergencyContactPhone" ? 30 : 200}
+                  maxLength={200}
                   onChange={(event) => setField(key, event.target.value)}
                   data-field={key}
                   style={{
@@ -990,13 +984,6 @@ export default function DoctorEmergencyProfiles() {
             <h3 style={{ marginTop: 0 }}>
               {creating ? "Create basic profile" : "Save changes"}
             </h3>
-
-            {!activeApproval && (
-              <p role="alert">
-                Select a matching approved create or update permission before
-                saving.
-              </p>
-            )}
 
             <label style={{ display: "block", marginBottom: 12 }}>
               Reason for{" "}

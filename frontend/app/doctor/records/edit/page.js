@@ -5,6 +5,7 @@ import PortalShell from "../../../../components/PortalShell";
 import { DiagnosisFields, RECORD_TYPES } from "../../../../components/DiagnosisRecord";
 import { api } from "../../../../lib/api";
 import { FieldError, scrollToField } from "../../../../components/FieldError";
+import { toast } from "../../../../components/Toast";
 
 export default function EditRecord() {
   const [ids, setIds] = useState({ patientId: "", recordId: "" });
@@ -61,9 +62,11 @@ export default function EditRecord() {
     try {
       await api.requestRecordUpdate(ids.patientId, ids.recordId);
       setSaved(null);
+      toast.success("Request sent. You can edit once the patient approves.");
       await load();
     } catch (err) {
       setError(err.message || "Couldn't send the request.");
+      toast.error(err.message || "Couldn't send the request.");
     } finally {
       setBusy(false);
     }
@@ -94,11 +97,13 @@ export default function EditRecord() {
         password,
       });
       setSaved(updated);
+      toast.success(`Saved as version ${updated.version}.`);
       setCurrent(null);
       setPassword("");
       await load();
     } catch (err) {
       setFieldErrors({ submit: err.message || "Couldn't save the new version." });
+      toast.error(err.message || "Couldn't save the new version.");
       scrollToField("submit");
     } finally {
       setBusy(false);

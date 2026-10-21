@@ -93,6 +93,39 @@ class Approvals {
   }
 }
 
+class ViewRequests {
+  constructor() { this.items = []; }
+  async create({ prescriptionId, patientUserId, doctorUserId }) {
+    const item = { id: crypto.randomUUID(), prescription_id: prescriptionId, patient_user_id: patientUserId, doctor_user_id: doctorUserId, status: 'pending', requested_at: new Date() };
+    this.items.push(item);
+    return item;
+  }
+  async listForDoctorPatient(doctorId, patientId) { return this.items.filter((r) => r.doctor_user_id === doctorId && r.patient_user_id === patientId); }
+  async listForPatient(patientId) { return this.items.filter((r) => r.patient_user_id === patientId); }
+  async decide({ requestId, patientUserId, status }) {
+    const item = this.items.find((r) => r.id === requestId && r.patient_user_id === patientUserId && r.status === 'pending');
+    if (!item) return null;
+    item.status = status;
+    return item;
+  }
+  async consumeApproved({ prescriptionId, patientUserId, doctorUserId }) {
+    const item = this.items.find((r) => r.prescription_id === prescriptionId && r.patient_user_id === patientUserId && r.doctor_user_id === doctorUserId && r.status === 'approved');
+    if (!item) return null;
+    item.status = 'used';
+    return item;
+  }
+}
+
+class Dispenses {
+  constructor() { this.items = []; }
+  async create(input) {
+    const item = { id: crypto.randomUUID(), prescription_id: input.prescriptionId, pharmacy_user_id: input.pharmacyUserId, quantities: input.quantities, created_at: input.createdAt };
+    this.items.push(item);
+    return item;
+  }
+  async listForPrescription(id) { return this.items.filter((d) => d.prescription_id === id); }
+}
+
 const PASSWORD = 'Strong#Pass123';
 const form = {
   title: 'Chest infection',
@@ -131,6 +164,8 @@ async function setup() {
     prescriptionRepository,
     prescriptionApprovalRepository: new Approvals(),
     prescriptionShareRepository: new Shares(prescriptionRepository),
+    prescriptionViewRequestRepository: new ViewRequests(),
+    prescriptionDispenseRepository: new Dispenses(),
     medicalStorage: storage,
     fileEncryptionService: new FileEncryptionService({ masterKey: Buffer.alloc(32, 5) }),
     userRepository,
@@ -243,11 +278,12 @@ describe('prescription service', () => {
     const prescription = await service.create('doctor', 'patient', { ...form, approvalId, password: PASSWORD });
     const share = await service.shareWithPharmacy('patient', prescription.id, 'PH-001');
 
-    await expect(service.dispense('pharmacy', share.id, 'Wrong#Pass1234')).rejects.toMatchObject({ code: 'INVALID_SIGNING_PASSWORD' });
-    await expect(service.dispense('pharmacy', share.id, PASSWORD)).resolves.toMatchObject({ prescriptionId: prescription.id });
+    await expect(service.dispense('pharmacy', share.id, 'Wrong#Pass1234', [1])).rejects.toMatchObject({ code: 'INVALID_SIGNING_PASSWORD' });
+    await expect(service.dispense('pharmacy', share.id, PASSWORD, [0])).rejects.toMatchObject({ code: 'QUANTITIES_REQUIRED' });
+    await expect(service.dispense('pharmacy', share.id, PASSWORD, [1])).resolves.toMatchObject({ prescriptionId: prescription.id, complete: true });
     // Dispensing ends the pharmacy's access to the prescription.
     await expect(service.openForPharmacy('pharmacy', share.id)).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
-    await expect(service.dispense('pharmacy', share.id, PASSWORD)).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
+    await expect(service.dispense('pharmacy', share.id, PASSWORD, [1])).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
     await expect(service.shareWithPharmacy('patient', prescription.id, 'PH-002')).rejects.toMatchObject({ code: 'PRESCRIPTION_ALREADY_DISPENSED' });
   });
 
@@ -260,13 +296,34 @@ describe('prescription service', () => {
     await expect(integrityOf(service, prescriptionRepository, prescription.id)).resolves.toMatchObject({ valid: true });
   });
 
-  it('lets a linked doctor read the patient prescriptions, and no one else', async () => {
+  it('tracks how many of each medicine are given, and closes once all are given', async () => {
+    const { service } = await setup();
+    const approvalId = await approved(service, 'doctor');
+    const medications = [{ ...form.medications[0], quantity: 15 }];
+    const prescription = await service.create('doctor', 'patient', { ...form, medications, approvalId, password: PASSWORD });
+    const share = await service.shareWithPharmacy('patient', prescription.id, 'PH-001');
+
+    await expect(service.dispense('pharmacy', share.id, PASSWORD, [16])).rejects.toMatchObject({ code: 'QUANTITY_TOO_HIGH' });
+    const first = await service.dispense('pharmacy', share.id, PASSWORD, [10]);
+    expect(first).toMatchObject({ complete: false });
+    expect(first.dispensing.medicines[0]).toMatchObject({ total: 15, given: 10, left: 5 });
+    // A part-given prescription stays open to the pharmacy.
+    await expect(service.openForPharmacy('pharmacy', share.id)).resolves.toMatchObject({ dispensed: null });
+    await expect(service.dispense('pharmacy', share.id, PASSWORD, [5])).resolves.toMatchObject({ complete: true });
+    await expect(service.openForPharmacy('pharmacy', share.id)).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
+  });
+
+  it('lets a linked doctor open a prescription once per patient approval, and no one else', async () => {
     const { service } = await setup();
     const approvalId = await approved(service, 'doctor');
     const prescription = await service.create('doctor', 'patient', { ...form, approvalId, password: PASSWORD });
+    await expect(service.viewForDoctor('other', 'patient', prescription.id)).rejects.toMatchObject({ code: 'PRESCRIPTION_VIEW_APPROVAL_REQUIRED' });
+    const request = await service.requestViewForDoctor('other', 'patient', prescription.id);
+    await service.decideViewRequest('patient', request.id, 'approved');
     const view = await service.viewForDoctor('other', 'patient', prescription.id);
     expect(view.medications[0].name).toBe('Amoxicillin');
-    await expect(service.listForDoctor('other', 'patient')).resolves.toHaveLength(1);
+    await expect(service.viewForDoctor('other', 'patient', prescription.id)).rejects.toMatchObject({ code: 'PRESCRIPTION_VIEW_APPROVAL_REQUIRED' });
+    await expect(service.listForDoctor('other', 'patient')).resolves.toMatchObject([{ viewRequest: { status: 'used' } }]);
 
     service.consentService = { assertDoctorAccess: async () => { throw Object.assign(new Error('no consent'), { code: 'CONSENT_REQUIRED' }); } };
     await expect(service.viewForDoctor('other', 'patient', prescription.id)).rejects.toMatchObject({ code: 'CONSENT_REQUIRED' });

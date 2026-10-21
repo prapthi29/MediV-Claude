@@ -176,7 +176,7 @@ describe('emergency profile API authorization', () => {
         gender: 'female',
         dateOfBirth: '1990-04-12',
         emergencyContactName: 'Ravi Patel',
-        emergencyContactPhone: '+919999999999',
+        emergencyContactPhone: '+91 9999999999',
         allergies: [],
         allergiesStatus: 'unknown',
         chronicConditions: [],

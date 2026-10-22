@@ -87,6 +87,8 @@ export class EmergencyProfileAccessRequestRepository {
     return result.rows;
   }
 
+  // Only requests the doctor can still act on: waiting for the patient, or
+  // approved and not yet used. Used, rejected and revoked ones are left out.
   async listForDoctor({ patientUserId, doctorUserId }) {
     const result = await this.database.query(
       `SELECT
@@ -99,6 +101,7 @@ export class EmergencyProfileAccessRequestRepository {
        FROM emergency_profile_access_requests
        WHERE patient_user_id = $1
          AND doctor_user_id = $2
+         AND (status = 'pending' OR (status = 'approved' AND used_at IS NULL))
        ORDER BY requested_at DESC`,
       [patientUserId, doctorUserId],
     );

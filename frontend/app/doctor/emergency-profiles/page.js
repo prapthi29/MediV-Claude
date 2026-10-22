@@ -288,6 +288,8 @@ export default function DoctorEmergencyProfiles() {
   const [permissionRequests, setPermissionRequests] = useState([]);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [loadingRequests, setLoadingRequests] = useState(false);
+  // The ask buttons wait for the first load, so they don't flash and vanish.
+  const [requestsLoaded, setRequestsLoaded] = useState(false);
   const [requesting, setRequesting] = useState("");
   const [saving, setSaving] = useState(false);
   const [activeApproval, setActiveApproval] = useState(null);
@@ -330,6 +332,7 @@ export default function DoctorEmergencyProfiles() {
         await api.getEmergencyProfilePermissionRequestsForDoctor(id);
 
       setPermissionRequests(Array.isArray(requests) ? requests : []);
+      setRequestsLoaded(true);
     } catch (err) {
       toast.error(
         err.message || "Unable to load basic profile permission requests."
@@ -381,6 +384,7 @@ export default function DoctorEmergencyProfiles() {
     setCreating(false);
     setActiveApproval(null);
     setPermissionRequests([]);
+    setRequestsLoaded(false);
     setNotes({});
     setFieldErrors({});
 
@@ -615,14 +619,19 @@ export default function DoctorEmergencyProfiles() {
 
   // Only permissions that still fit this patient are shown.
   const approvedRequests = permissionRequests.filter(
-    (item) => requestStatusOf(item) === "approved" && allowedOperations.includes(String(item.operation).toLowerCase())
+    (item) =>
+      requestStatusOf(item) === "approved" &&
+      !(item.used_at || item.usedAt) &&
+      allowedOperations.includes(String(item.operation).toLowerCase())
   );
 
   // Once a request is waiting or approved, asking again is not offered.
   const openOperations = new Set(
     [...pendingRequests, ...approvedRequests].map((item) => String(item.operation).toLowerCase())
   );
-  const askOperations = allowedOperations.filter((operation) => !openOperations.has(operation));
+  const askOperations = requestsLoaded
+    ? allowedOperations.filter((operation) => !openOperations.has(operation))
+    : [];
 
   return (
     <PortalShell
@@ -678,7 +687,9 @@ export default function DoctorEmergencyProfiles() {
 
             <h3>Request permission</h3>
             <p>
-              {askOperations.length === 0
+              {!requestsLoaded
+                ? "Checking your permissions..."
+                : askOperations.length === 0
                 ? "Your request is with the patient. Its status is shown below."
                 : hasProfile
                   ? "This patient already has a basic profile. Ask to view or edit it; each needs the patient's approval."
@@ -716,7 +727,7 @@ export default function DoctorEmergencyProfiles() {
               flexWrap: "wrap",
             }}
           >
-            <h3 style={{ marginTop: 0 }}>Permission requests</h3>
+            <h3 style={{ marginTop: 0 }}>Active permissions</h3>
             <button
               type="button"
               className="btn btn-secondary btn-sm"
@@ -727,10 +738,10 @@ export default function DoctorEmergencyProfiles() {
             </button>
           </div>
 
-          {loadingRequests && <p>Loading permission requests...</p>}
+          {loadingRequests && <p>Loading permissions...</p>}
 
-          {!loadingRequests && pendingRequests.length === 0 && (
-            <p style={{ color: "var(--muted)" }}>No pending requests.</p>
+          {!loadingRequests && pendingRequests.length === 0 && approvedRequests.length === 0 && (
+            <p style={{ color: "var(--muted)" }}>No active permissions.</p>
           )}
 
           {pendingRequests.map((item, index) => (
@@ -742,48 +753,33 @@ export default function DoctorEmergencyProfiles() {
               }}
             >
               <strong>{operationLabel(item.operation)}</strong>
-              <p>Waiting for patient approval.</p>
-              <span className="emergency-muted">
-                Status: {item.status}
-              </span>
+              <p style={{ color: "var(--muted)", margin: "4px 0 0" }}>Waiting for the patient to approve.</p>
             </div>
           ))}
 
-          {approvedRequests.length > 0 && (
-            <>
-              <h4>Approved permissions</h4>
-              <p style={{ color: "var(--muted)", fontSize: 13 }}>
-                Each approval can be used once.
+          {approvedRequests.map((item, index) => (
+            <div
+              key={requestIdOf(item) || index}
+              style={{
+                borderTop: "1px solid var(--border, #ddd)",
+                padding: "12px 0",
+              }}
+            >
+              <strong>{operationLabel(item.operation)}</strong>
+              <p style={{ color: "var(--muted)", margin: "4px 0 8px" }}>
+                Approved by the patient. It can be used once.
               </p>
-
-              {approvedRequests.map((item, index) => (
-                <div
-                  key={requestIdOf(item) || index}
-                  style={{
-                    borderTop: "1px solid var(--border, #ddd)",
-                    padding: "12px 0",
-                  }}
-                >
-                  <strong>{operationLabel(item.operation)}</strong>
-                  <p>
-                    Approved{" "}
-                    {item.decided_at || item.decidedAt
-                      ? fmtDate(item.decided_at || item.decidedAt)
-                      : ""}
-                  </p>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    disabled={loadingProfile || saving}
-                    onClick={() => useApprovedRequest(item)}
-                  >
-                    {operationLabel(item.operation)}
-                  </button>
-                  <InlineNote value={notes[requestIdOf(item)]} />
-                </div>
-              ))}
-            </>
-          )}
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={loadingProfile || saving}
+                onClick={() => useApprovedRequest(item)}
+              >
+                {operationLabel(item.operation)}
+              </button>
+              <InlineNote value={notes[requestIdOf(item)]} />
+            </div>
+          ))}
         </section>
       )}
 

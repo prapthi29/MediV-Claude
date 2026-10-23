@@ -31,11 +31,7 @@ const requestParams = z.object({ requestId: z.string().uuid() });
 const shareParams = z.object({ shareId: z.string().uuid() });
 const shareBody = z.object({ pharmacyLicenseId: z.string().trim().min(1).max(100) }).strict();
 const dispenseBody = z.object({
-  password: z.string().min(1).max(128),
-  // The pharmacy's own count: the total it will hand over for each medicine,
-  // and how many it is giving now.
-  totals: z.array(z.number().int().min(0).max(10000)).min(1).max(20),
-  quantities: z.array(z.number().int().min(0).max(10000)).min(1).max(20)
+  password: z.string().min(1).max(128)
 }).strict();
 const pharmacyParams = z.object({ licenseId: z.string().trim().min(1).max(100) });
 const decisionBody = z.object({ decision: z.enum(['approved', 'rejected', 'revoked']) }).strict();
@@ -128,8 +124,8 @@ export function createPrescriptionController(prescriptionService) {
     }),
     dispense: asyncHandler(async (req, res) => {
       const { shareId } = shareParams.parse(req.params);
-      const { password, totals, quantities } = dispenseBody.parse(req.body);
-      res.json({ dispensed: await prescriptionService.dispense(req.user.sub, shareId, password, { totals, quantities }) });
+      const { password } = dispenseBody.parse(req.body);
+      res.json({ dispensed: await prescriptionService.dispense(req.user.sub, shareId, password) });
     })
   };
 }

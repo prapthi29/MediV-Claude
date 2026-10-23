@@ -93,9 +93,6 @@ export function createDoctorMedicalRecordRouter(authService, medicalRecordServic
   router.get('/patients/:patientId/records', controller.listForDoctor);
   router.get('/patients/:patientId/records/:recordId/versions', controller.listDoctorRecordVersions);
   router.get('/patients/:patientId/records/:recordId/versions/:version/download', controller.downloadDoctorRecordVersion);
-  router.post('/patients/:patientId/records/:recordId/update-requests', controller.requestRecordUpdate);
-  router.get('/patients/:patientId/records/:recordId/edit', controller.getRecordForEdit);
-  router.post('/patients/:patientId/records/:recordId/versions', upload.single('document'), controller.updateRecordForDoctor);
   // Uses up the patient's single-view approval, so it is a POST.
   router.post('/patients/:patientId/records/:recordId/view', controller.viewForDoctor);
 

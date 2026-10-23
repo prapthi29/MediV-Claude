@@ -182,28 +182,6 @@ export function createMedicalRecordController(medicalRecordService) {
       res.status(201).json({ approval });
     }),
 
-    requestRecordUpdate: asyncHandler(async (req, res) => {
-      const { patientId, recordId: id } = patientRecordParams.parse(req.params);
-      const approval = await medicalRecordService.requestRecordUpdate(req.user.sub, patientId, id);
-      res.status(201).json({ approval });
-    }),
-
-    updateRecordForDoctor: asyncHandler(async (req, res) => {
-      const { patientId, recordId: id } = patientRecordParams.parse(req.params);
-      const content = parseRecordContent(req);
-      const approvalId = z.string().uuid().parse(req.body.approvalId);
-      const record = await medicalRecordService.updateRecordForDoctor(
-        req.user.sub, patientId, id, content,
-        uploadMetadata.parse({ title: req.body.title, category: req.body.category }), approvalId,
-        signingPassword.parse(req.body.password)
-      );
-      res.json({ record });
-    }),
-    getRecordForEdit: asyncHandler(async (req, res) => {
-      const { patientId, recordId: id } = patientRecordParams.parse(req.params);
-      const approvalId = z.string().uuid().parse(req.query.approvalId);
-      res.json(await medicalRecordService.getRecordForEdit(req.user.sub, patientId, id, approvalId));
-    }),
     viewForDoctor: asyncHandler(async (req, res) => {
       const { patientId, recordId: id } = patientRecordParams.parse(req.params);
       res.json(await medicalRecordService.viewRecordForDoctor(req.user.sub, patientId, id));

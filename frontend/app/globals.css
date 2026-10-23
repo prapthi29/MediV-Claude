@@ -736,9 +736,11 @@ textarea.input, .field textarea { resize: vertical; line-height: 1.5; }
 @media (max-width: 640px) { .toaster { left: 16px; right: 16px; bottom: 16px; max-width: none; } }
 /* A short result shown right next to the button that caused it */
 .inline-note { font-size: 13px; margin-top: 8px; color: var(--primary-dark, var(--primary)); font-weight: 500; }
-.phone-input { display: flex; gap: 8px; margin-top: 5px; }
-.phone-prefix { flex: 0 0 auto; display: flex; align-items: center; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--muted); font-weight: 600; }
-.phone-input input { flex: 1; min-width: 0; }
+/* Looks like the other boxes: one bordered box with a fixed +91 inside. */
+.phone-input { display: flex; align-items: center; gap: 8px; margin-top: 5px; padding-top: 0; padding-bottom: 0; }
+.phone-input:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-tint); }
+.phone-prefix { flex: 0 0 auto; color: var(--muted); font-weight: 600; font-size: 13.5px; }
+.phone-input input { flex: 1; min-width: 0; border: 0; padding: 10px 0; background: transparent; color: inherit; font-family: inherit; font-size: 13.5px; line-height: normal; outline: none; }
 .followup-reminder { display: flex; flex-direction: column; gap: 4px; margin-bottom: 18px; padding: 12px 14px; border-radius: 10px; background: var(--primary-tint); border: 1px solid var(--border); border-left: 4px solid var(--primary); font-size: 13.5px; color: var(--ink); }
 .nav-group-label { display: flex; align-items: center; gap: 10px; padding: 9px 12px 4px; font-size: 13.5px; font-weight: 600; color: var(--muted); }
 .nav-sublink { padding-left: 38px; }

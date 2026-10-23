@@ -167,7 +167,7 @@ export default function DoctorPatients() {
       role="doctor"
       eyebrow="Doctor Portal"
       title="My patients"
-      subtitle="Patients who linked you in the last 30 minutes. Each view, new record and edit needs the patient's approval."
+      subtitle="Patients who linked you in the last 30 minutes. Each view and new record needs the patient's approval."
     >
       {error && (
         <div className="card card-pad" role="alert" style={{ marginBottom: 16, color: "var(--red)" }}>
@@ -256,7 +256,6 @@ export default function DoctorPatients() {
                                   <th>Version</th>
                                   <th>Added</th>
                                   <th>View</th>
-                                  <th>Edit</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -270,11 +269,6 @@ export default function DoctorPatients() {
                                     <td>{record.version}</td>
                                     <td>{fmtDate(record.createdAt)}</td>
                                     <td style={{ whiteSpace: "nowrap" }}>{viewAction(patientId, record)}</td>
-                                    <td>
-                                      <Link href={`/doctor/records/edit?patient=${patientId}&record=${record.id}`} className="btn btn-ghost btn-sm">
-                                        {record.editRequest?.status === "approved" ? "Edit now" : record.editRequest?.status === "pending" ? "Edit requested" : "Edit"}
-                                      </Link>
-                                    </td>
                                   </tr>
                                 ))}
                               </tbody>

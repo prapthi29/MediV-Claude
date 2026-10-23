@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import PortalShell from "../../../components/PortalShell";
 import TimeLeft from "../../../components/TimeLeft";
+import FollowUpReminder from "../../../components/FollowUpReminder";
 import { StatCard, fmtDateTime } from "../../../components/ui";
 import { api } from "../../../lib/api";
 
@@ -85,6 +86,7 @@ export default function PatientDashboard() {
       title={loaded ? `Welcome back${displayName ? `, ${displayName.split(" ")[0]}` : ""}` : "Welcome back"}
       subtitle={loaded ? "Here's what's happening with your records." : "Loading your overview…"}
     >
+      <FollowUpReminder />
       {loaded && (
         <>
           {activeEmergencies.map((g) => (

@@ -14,11 +14,6 @@ export default function SharedPrescriptions() {
   const [browserCheck, setBrowserCheck] = useState(null);
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  // The pharmacy's own count: the total of each medicine (set on the first
-  // visit), how many are being handed over now, and any problem with each.
-  const [totals, setTotals] = useState([]);
-  const [giving, setGiving] = useState([]);
-  const [givingErrors, setGivingErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [pharmacyId, setPharmacyId] = useState("");
@@ -43,9 +38,6 @@ export default function SharedPrescriptions() {
       const view = await api.openSharedPrescription(shareId);
       setOpen(view);
       setPasswordError("");
-      setGiving(view.medications.map(() => ""));
-      setTotals(view.dispensing.medicines.map((m) => (m.total ? String(m.total) : "")));
-      setGivingErrors({});
       setBrowserCheck(await verifyPrescriptionInBrowser(view.medications, view.proof));
     } catch (err) {
       setOpen(null);
@@ -56,55 +48,36 @@ export default function SharedPrescriptions() {
 
   async function dispense(e) {
     e.preventDefault();
-    const counts = open.dispensing?.medicines || [];
-    const quantities = giving.map((q) => Number(q || 0));
-    const totalNumbers = totals.map((t) => Number(t || 0));
-    const errs = {};
-    totalNumbers.forEach((t, i) => {
-      if (t < 1) errs[`total-${i}`] = "Enter the total.";
-    });
-    quantities.forEach((q, i) => {
-      const left = totalNumbers[i] - (counts[i]?.given || 0);
-      if (totalNumbers[i] >= 1 && q > left) errs[i] = `Only ${left} left to give.`;
-    });
-    if (!quantities.some((q) => q > 0)) errs[0] = errs[0] || "Enter how many you are giving.";
-    setGivingErrors(errs);
-    if (!password) setPasswordError("Enter your password to confirm.");
-    if (Object.keys(errs).length || !password) return;
+    if (!password) {
+      setPasswordError("Enter your password to confirm.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      const result = await api.dispensePrescription(open.share.id, password, { totals: totalNumbers, quantities });
+      await api.dispensePrescription(open.share.id, password);
       setPassword("");
-      if (result.complete) {
-        // Once everything is given, this pharmacy can no longer open the prescription.
-        setOpen(null);
-        setBrowserCheck(null);
-        toast.success("Everything is given. The prescription is closed and listed in your dispensing history.");
-      } else {
-        setOpen((current) => ({ ...current, dispensing: result.dispensing }));
-        setGiving(open.medications.map(() => ""));
-        setTotals(result.dispensing.medicines.map((m) => (m.total ? String(m.total) : "")));
-        toast.success("Saved. The rest can be given later while the patient's share is open.");
-      }
+      // Once dispensed, this pharmacy can no longer open the prescription.
+      setOpen(null);
+      setBrowserCheck(null);
+      toast.success("Dispensed. The prescription is closed and listed in your dispensing history.");
       load();
     } catch (err) {
-      setPasswordError(err.message || "Couldn't save what you gave.");
-      toast.error(err.message || "Couldn't save what you gave.");
+      setPasswordError(err.message || "Couldn't dispense this prescription.");
+      toast.error(err.message || "Couldn't dispense this prescription.");
     } finally {
       setBusy(false);
     }
   }
 
   const verified = open && open.integrity.valid && browserCheck?.medicinesMatch && browserCheck?.signatureMatches;
-  const canGive = Boolean(verified && !open?.dispensed);
 
   return (
     <PortalShell
       role="pharmacy"
       eyebrow="Pharmacy Portal"
       title="Shared prescriptions"
-      subtitle="Patients share a prescription with your pharmacy ID for 30 minutes. You see the patient's name, patient ID and the medicines only. You can give medicines in parts; access ends once everything is given."
+      subtitle="Patients share a prescription with your pharmacy ID for 30 minutes. You see the patient's name, patient ID and the medicines only. Access ends once you dispense it."
     >
       {pharmacyId && (
         <div className="card card-pad" style={{ marginBottom: 20 }}>
@@ -180,68 +153,18 @@ export default function SharedPrescriptions() {
                 <th>How often</th>
                 <th>For how long</th>
                 <th>Instructions</th>
-                <th>Total</th>
-                <th>Given</th>
-                <th>Left</th>
-                {canGive && <th>Giving now</th>}
               </tr>
             </thead>
             <tbody>
-              {open.medications.map((m, i) => {
-                const count = open.dispensing?.medicines?.[i];
-                return (
-                  <tr key={i}>
-                    <td style={{ fontWeight: 600 }}>{m.name}</td>
-                    <td>{m.dose}</td>
-                    <td>{m.frequency}</td>
-                    <td>{m.duration}</td>
-                    <td>{m.instructions || "—"}</td>
-                    <td style={{ minWidth: 100 }}>
-                      {count?.total || !canGive ? (
-                        count?.total ?? "—"
-                      ) : (
-                        <>
-                          <input
-                            aria-label={`Total ${m.name} to give`}
-                            inputMode="numeric"
-                            maxLength={5}
-                            value={totals[i] ?? ""}
-                            placeholder="e.g. 15"
-                            onChange={(e) => {
-                              const value = e.target.value.replace(/\D/g, "");
-                              setTotals((list) => list.map((t, j) => (j === i ? value : t)));
-                              setGivingErrors({});
-                            }}
-                            style={{ width: 80 }}
-                          />
-                          <FieldError message={givingErrors[`total-${i}`]} />
-                        </>
-                      )}
-                    </td>
-                    <td>{count?.given ?? 0}</td>
-                    <td>{totals[i] ? Math.max(0, Number(totals[i]) - (count?.given || 0)) : "—"}</td>
-                    {canGive && (
-                      <td style={{ minWidth: 110 }}>
-                        <input
-                          aria-label={`How many ${m.name} you are giving`}
-                          inputMode="numeric"
-                          maxLength={5}
-                          value={giving[i] ?? ""}
-                          disabled={count?.left === 0}
-                          placeholder={count?.left === 0 ? "Done" : "0"}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/\D/g, "");
-                            setGiving((list) => list.map((q, j) => (j === i ? value : q)));
-                            setGivingErrors({});
-                          }}
-                          style={{ width: 90 }}
-                        />
-                        <FieldError message={givingErrors[i]} />
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
+              {open.medications.map((m, i) => (
+                <tr key={i}>
+                  <td style={{ fontWeight: 600 }}>{m.name}</td>
+                  <td>{m.dose}</td>
+                  <td>{m.frequency}</td>
+                  <td>{m.duration}</td>
+                  <td>{m.instructions || "—"}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
 
@@ -282,7 +205,7 @@ export default function SharedPrescriptions() {
                   />
                 </div>
                 <button className="btn btn-primary" type="submit" disabled={busy}>
-                  {busy ? "Saving…" : "Save what you gave"}
+                  {busy ? "Dispensing…" : "Dispense"}
                 </button>
               </div>
               <FieldError message={passwordError} />

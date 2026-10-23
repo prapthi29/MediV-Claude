@@ -1,6 +1,6 @@
 "use client";
 
-// Reminds the patient, on every page of their portal, of each follow-up a
+// Reminds the patient, on their overview page, of each follow-up a
 // doctor has set, until the day has passed.
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";

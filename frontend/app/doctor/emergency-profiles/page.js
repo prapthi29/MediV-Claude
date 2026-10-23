@@ -867,6 +867,19 @@ export default function DoctorEmergencyProfiles() {
             </label>
 
             <label style={{ display: "block", marginBottom: 12 }}>
+              Emergency contact name
+              <input
+                className="input"
+                value={form.emergencyContactName}
+                maxLength={200}
+                onChange={(event) => setField("emergencyContactName", event.target.value)}
+                data-field="emergencyContactName"
+                style={{ display: "block", width: "100%", marginTop: 5 }}
+              />
+              <FieldError message={fieldErrors.emergencyContactName} />
+            </label>
+
+            <label style={{ display: "block", marginBottom: 12 }}>
               Emergency contact phone
               <PhoneInput
                 value={form.emergencyContactPhone}
@@ -876,33 +889,18 @@ export default function DoctorEmergencyProfiles() {
               <FieldError message={fieldErrors.emergencyContactPhone} />
             </label>
 
-            {[
-              ["emergencyContactName", "Emergency contact name"],
-              [
-                "emergencyContactRelationship",
-                "Relationship (optional)",
-              ],
-            ].map(([key, label]) => (
-              <label
-                key={key}
-                style={{ display: "block", marginBottom: 12 }}
-              >
-                {label}
-                <input
-                  className="input"
-                  value={form[key]}
-                  maxLength={200}
-                  onChange={(event) => setField(key, event.target.value)}
-                  data-field={key}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    marginTop: 5,
-                  }}
-                />
-                <FieldError message={fieldErrors[key]} />
-              </label>
-            ))}
+            <label style={{ display: "block", marginBottom: 12 }}>
+              Relationship (optional)
+              <input
+                className="input"
+                value={form.emergencyContactRelationship}
+                maxLength={200}
+                onChange={(event) => setField("emergencyContactRelationship", event.target.value)}
+                data-field="emergencyContactRelationship"
+                style={{ display: "block", width: "100%", marginTop: 5 }}
+              />
+              <FieldError message={fieldErrors.emergencyContactRelationship} />
+            </label>
           </section>
 
           <ListEditor

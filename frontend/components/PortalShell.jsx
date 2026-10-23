@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import { Toaster } from "./Toast";
-import FollowUpReminder from "./FollowUpReminder";
 
 const PORTAL_LABELS = {
   admin: "Admin Portal",
@@ -98,8 +97,6 @@ export default function PortalShell({
             <h1 className="page-title">{title}</h1>
             {subtitle && <p className="page-sub">{subtitle}</p>}
           </header>
-
-          {role === "patient" && <FollowUpReminder />}
 
           <div className="page-body">{children}</div>
         </div>

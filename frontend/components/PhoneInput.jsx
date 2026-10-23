@@ -6,7 +6,7 @@ import { joinPhone, splitPhone } from "../lib/phone";
 export default function PhoneInput({ id, value, onChange, dataField }) {
   const { digits } = splitPhone(value);
   return (
-    <div className="phone-input" data-field={dataField}>
+    <div className="input phone-input" data-field={dataField}>
       <span className="phone-prefix" aria-label="Country code">+91</span>
       <input
         id={id}

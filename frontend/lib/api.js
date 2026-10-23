@@ -254,27 +254,14 @@ export const api = {
       method: "POST",
     }),
 
-  requestRecordUpdate: (patientId, recordId) =>
-    request(
-      `/doctor/patients/${patientId}/records/${recordId}/update-requests`,
-      { method: "POST" }
-    ).then((r) => r.approval),
-
-  getRecordForEdit: (patientId, recordId, approvalId) =>
-    request(
-      `/doctor/patients/${patientId}/records/${recordId}/edit?approvalId=${encodeURIComponent(approvalId)}`
-    ),
-
-  // Creates (no recordId) or edits a record. Content is a form, a file, or both.
+  // Creates a record. Content is a form, a file, or both.
   saveRecord: ({
     patientId,
-    recordId,
     approvalId,
     title,
     category,
     form,
     file,
-    keepExistingFile,
     password,
   }) => {
     const body = new FormData();
@@ -284,13 +271,8 @@ export const api = {
     if (category) body.append("category", category);
     if (form) body.append("form", JSON.stringify(form));
     if (file) body.append("document", file);
-    if (keepExistingFile) body.append("keepExistingFile", "true");
 
-    const path = recordId
-      ? `/doctor/patients/${patientId}/records/${recordId}/versions`
-      : `/doctor/patients/${patientId}/records`;
-
-    return request(path, { method: "POST", body }).then((r) => r.record);
+    return request(`/doctor/patients/${patientId}/records`, { method: "POST", body }).then((r) => r.record);
   },
 
   // ---------- patient: approve record creation and edits ----------
@@ -447,12 +429,10 @@ export const api = {
 
   openSharedPrescription: (shareId) => request(`/pharmacy/shares/${shareId}`),
 
-  // totals[i] is the pharmacy's total for medicine i; quantities[i] is how
-  // many it is handing over now.
-  dispensePrescription: (shareId, password, { totals, quantities }) =>
+  dispensePrescription: (shareId, password) =>
     request(`/pharmacy/shares/${shareId}/dispense`, {
       method: "POST",
-      body: { password, totals, quantities },
+      body: { password },
     }).then((r) => r.dispensed),
 
   getPatientPrescriptions: () =>

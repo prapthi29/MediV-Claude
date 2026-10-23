@@ -272,7 +272,7 @@ describe('prescription service', () => {
     await expect(service.openForPharmacy('pharmacy2', share.id)).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
   });
 
-  it('lets the pharmacy dispense once, signed with its own key', async () => {
+  it('lets the pharmacy dispense, signed with its own key, and the patient share it again for a refill', async () => {
     const { service } = await setup();
     const approvalId = await approved(service, 'doctor');
     const prescription = await service.create('doctor', 'patient', { ...form, approvalId, password: PASSWORD });
@@ -283,7 +283,10 @@ describe('prescription service', () => {
     // Dispensing ends the pharmacy's access to the prescription.
     await expect(service.openForPharmacy('pharmacy', share.id)).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
     await expect(service.dispense('pharmacy', share.id, PASSWORD)).rejects.toMatchObject({ code: 'SHARE_NOT_ACTIVE' });
-    await expect(service.shareWithPharmacy('patient', prescription.id, 'PH-002')).rejects.toMatchObject({ code: 'PRESCRIPTION_ALREADY_DISPENSED' });
+    // The patient can share the same prescription again for the next refill.
+    const refill = await service.shareWithPharmacy('patient', prescription.id, 'PH-001');
+    expect(refill.id).not.toBe(share.id);
+    await expect(service.dispense('pharmacy', refill.id, PASSWORD)).resolves.toMatchObject({ prescriptionId: prescription.id });
   });
 
   it('keeps symptoms and follow-up in the verified prescription', async () => {

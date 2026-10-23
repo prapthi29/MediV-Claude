@@ -8,6 +8,7 @@ import { api } from "../../../lib/api";
 export default function DoctorDashboard() {
   const [patients, setPatients] = useState(null);
   const [licenseId, setLicenseId] = useState(null);
+  const [name, setName] = useState("");
 
   useEffect(() => {
     api.getDoctorPatients().then(setPatients);
@@ -17,27 +18,24 @@ export default function DoctorDashboard() {
       const stored = JSON.parse(window.localStorage.getItem("sch_user") || "null");
       const storedLicense = stored?.licenseId || stored?.license_id;
       if (storedLicense) setLicenseId(storedLicense);
+      if (stored?.name) setName(stored.name);
     } catch {
       // Ignore malformed or missing localStorage value.
     }
   }, []);
 
   const activeCount = patients ? patients.length : "-";
-  const recordsCount = patients
-    ? patients.reduce((sum, p) => sum + (p.records_count || 0), 0)
-    : "—";
 
   return (
     <PortalShell
       role="doctor"
       eyebrow="Doctor Portal"
-      title="Overview"
+      title={`Welcome back${name ? `, ${name}` : ""}`}
       subtitle="Your access is patient-granted and revocable at any time — you only see what's currently shared with you."
     >
-      <div className="grid grid-3" style={{ marginBottom: 20 }}>
+      <div className="grid grid-even-2" style={{ marginBottom: 20 }}>
+        <StatCard label="License ID" value={<span className="mono" style={{ fontSize: 15 }}>{licenseId || "—"}</span>} icon={<Dot color="var(--muted)" />} />
         <StatCard label="Active patients" value={activeCount} icon={<Dot color="var(--primary)" />} />
-        <StatCard label="Records you've added" value={recordsCount} icon={<Dot color="var(--mint)" />} />
-        <StatCard label="License" value={<span className="mono" style={{ fontSize: 15 }}>{licenseId || "—"}</span>} icon={<Dot color="var(--muted)" />} />
       </div>
 
       <div className="card card-pad">

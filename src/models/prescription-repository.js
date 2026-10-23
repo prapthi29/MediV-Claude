@@ -21,7 +21,9 @@ export class PrescriptionRepository {
 
   async listForPatient(patientUserId) {
     const result = await this.database.query(
-      `SELECT p.*, u.email AS doctor_email, u.name AS doctor_name FROM prescriptions p
+      `SELECT p.*, u.email AS doctor_email, u.name AS doctor_name,
+              (SELECT MAX(pd.created_at) FROM prescription_dispenses pd WHERE pd.prescription_id = p.id) AS last_dispensed_at
+       FROM prescriptions p
        JOIN users u ON u.id = p.doctor_user_id
        WHERE p.patient_user_id = $1 ORDER BY p.created_at DESC`,
       [patientUserId]
@@ -31,7 +33,9 @@ export class PrescriptionRepository {
 
   async findById(id) {
     const result = await this.database.query(
-      `SELECT p.*, u.name AS doctor_name FROM prescriptions p
+      `SELECT p.*, u.name AS doctor_name,
+              (SELECT MAX(pd.created_at) FROM prescription_dispenses pd WHERE pd.prescription_id = p.id) AS last_dispensed_at
+       FROM prescriptions p
        JOIN users u ON u.id = p.doctor_user_id WHERE p.id = $1`,
       [id]
     );
@@ -47,7 +51,7 @@ export class PrescriptionRepository {
     return result.rows[0];
   }
 
-  // Only the first dispense succeeds.
+  // Records the first dispense; later refills are in prescription_dispenses.
   async markDispensed(id, { pharmacyUserId, dispensedAt, signature, signerAddress }) {
     const result = await this.database.query(
       `UPDATE prescriptions

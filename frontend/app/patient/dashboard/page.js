@@ -139,15 +139,9 @@ export default function PatientDashboard() {
             </div>
           )}
 
-          <div className="grid grid-4" style={{ marginBottom: 20 }}>
+          <div className="grid grid-even-2" style={{ marginBottom: 20 }}>
             <StatCard label="Doctors with access" value={consents.length} icon={<ShieldIcon />} />
             <StatCard label="Lab reports" value={records.length} icon={<FileIcon />} />
-            <StatCard
-              label="Verified records"
-              value={records.filter((r) => r.blockchainStatus === "registered").length}
-              icon={<PillIcon />}
-            />
-            <StatCard label="Recent events" value={events.length} icon={<IdIcon />} />
           </div>
 
           <div className="card card-pad">
@@ -184,23 +178,6 @@ function FileIcon() {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#0E7C7B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
-    </svg>
-  );
-}
-function PillIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#0E7C7B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="9" width="18" height="6" rx="3" />
-      <path d="M12 9v6" />
-    </svg>
-  );
-}
-function IdIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#0E7C7B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <circle cx="9" cy="12" r="2" />
-      <path d="M14 10h4M14 14h4" />
     </svg>
   );
 }

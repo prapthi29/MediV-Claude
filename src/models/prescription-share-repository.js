@@ -3,7 +3,10 @@ const SHARE_SELECT = `
          ph.name AS pharmacy_name, ph.license_id AS pharmacy_license_id,
          pt.name AS patient_name, pt.patient_id AS patient_health_id,
          p.title AS prescription_title, p.created_at AS issued_at,
-         p.dispensed_at, p.dispensed_by_user_id,
+         -- When the pharmacy dispensed against this share, if it did.
+         (SELECT MAX(pd.created_at) FROM prescription_dispenses pd
+          WHERE pd.prescription_id = s.prescription_id AND pd.pharmacy_user_id = s.pharmacy_user_id
+            AND pd.created_at >= s.created_at AND (s.revoked_at IS NULL OR pd.created_at <= s.revoked_at)) AS dispensed_at,
          d.name AS doctor_name
   FROM prescription_shares s
   JOIN users ph ON ph.id = s.pharmacy_user_id
@@ -34,7 +37,7 @@ export class PrescriptionShareRepository {
     const result = await this.database.query(
       `${SHARE_SELECT}
        WHERE s.prescription_id = $1 AND s.pharmacy_user_id = $2
-         AND s.revoked_at IS NULL AND s.expires_at > NOW() AND p.dispensed_at IS NULL
+         AND s.revoked_at IS NULL AND s.expires_at > NOW()
        ORDER BY s.created_at DESC LIMIT 1`,
       [prescriptionId, pharmacyUserId]
     );
@@ -45,7 +48,7 @@ export class PrescriptionShareRepository {
     const result = await this.database.query(
       `${SHARE_SELECT}
        WHERE s.id = $1 AND s.pharmacy_user_id = $2
-         AND s.revoked_at IS NULL AND s.expires_at > NOW() AND p.dispensed_at IS NULL`,
+         AND s.revoked_at IS NULL AND s.expires_at > NOW()`,
       [id, pharmacyUserId]
     );
     return result.rows[0] ?? null;
@@ -55,7 +58,6 @@ export class PrescriptionShareRepository {
     const result = await this.database.query(
       `${SHARE_SELECT}
        WHERE s.pharmacy_user_id = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
-         AND p.dispensed_at IS NULL
        ORDER BY s.created_at DESC`,
       [pharmacyUserId]
     );
@@ -70,7 +72,8 @@ export class PrescriptionShareRepository {
     return result.rows;
   }
 
-  // Called once a prescription is dispensed: no pharmacy can open it again.
+  // Called when a prescription is dispensed: the shares in use end, and the
+  // patient can share it again for the next refill.
   async revokeAllForPrescription(prescriptionId) {
     await this.database.query(
       `UPDATE prescription_shares SET revoked_at = NOW()

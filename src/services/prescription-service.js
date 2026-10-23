@@ -276,9 +276,6 @@ export class PrescriptionService {
     if (prescription.format !== 'form') {
       throw new AppError(409, 'Only typed prescriptions can be shared with a pharmacy.', 'PRESCRIPTION_NOT_SHAREABLE');
     }
-    if (prescription.dispensed_at) {
-      throw new AppError(409, 'This prescription has already been dispensed.', 'PRESCRIPTION_ALREADY_DISPENSED');
-    }
     const pharmacy = await this.userRepository.findActivePharmacyByLicenseId(pharmacyLicenseId);
     if (!pharmacy) {
       throw new AppError(404, 'No approved pharmacy has that ID.', 'PHARMACY_NOT_FOUND');
@@ -350,18 +347,15 @@ export class PrescriptionService {
         signature: prescription.doctor_signature,
         signerAddress: prescription.signer_address
       },
-      integrity,
-      dispensed: prescription.dispensed_at ? { at: prescription.dispensed_at, byUserId: prescription.dispensed_by_user_id } : null
+      integrity
     };
   }
 
   // The pharmacy confirms it handed over the prescription and signs that
-  // with its own key. Once dispensed, no pharmacy can open it again.
+  // with its own key. The share then ends; the patient can share the same
+  // prescription again for a refill (for example, monthly tablets).
   async dispense(pharmacyUserId, shareId, password) {
     const { prescription } = await this.requireShare(pharmacyUserId, shareId);
-    if (prescription.dispensed_at) {
-      throw new AppError(409, 'This prescription has already been dispensed.', 'PRESCRIPTION_ALREADY_DISPENSED');
-    }
     const { document, integrity } = await this.open(prescription);
     if (!integrity.valid) {
       throw new AppError(409, 'This prescription failed verification and cannot be dispensed.', 'PRESCRIPTION_NOT_VERIFIED');
@@ -382,18 +376,17 @@ export class PrescriptionService {
       prescriptionId: prescription.id, pharmacyUserId, totals: [], quantities: [], dispenseSha256: digest, signature, signerAddress, createdAt: dispensedAt
     });
 
-    const updated = await this.prescriptionRepository.markDispensed(prescription.id, { pharmacyUserId, dispensedAt, signature, signerAddress });
-    if (!updated) {
-      throw new AppError(409, 'This prescription has already been dispensed.', 'PRESCRIPTION_ALREADY_DISPENSED');
+    if (!prescription.dispensed_at) {
+      await this.prescriptionRepository.markDispensed(prescription.id, { pharmacyUserId, dispensedAt, signature, signerAddress });
     }
-    // Once dispensed, no pharmacy can open this prescription again.
+    // The pharmacy can no longer open it; a refill needs a new share.
     await this.prescriptionShareRepository.revokeAllForPrescription(prescription.id);
 
     const medicationSummary = medications.map((m) => m.name).join(', ');
     await this.auditService?.record({ eventType: 'prescription_dispensed', actorUserId: pharmacyUserId, subjectUserId: prescription.patient_user_id, resourceType: 'prescription', resourceId: prescription.id, metadata: { dispenseSha256: digest, signerAddress, medication_summary: medicationSummary } });
     return {
       prescriptionId: prescription.id,
-      dispensedAt: updated.dispensed_at
+      dispensedAt
     };
   }
 
@@ -475,7 +468,8 @@ export class PrescriptionService {
     return {
       id: prescription.id, patientUserId: prescription.patient_user_id, doctorUserId: prescription.doctor_user_id,
       doctorName: prescription.doctor_name ?? null, format: prescription.format ?? 'file',
-      dispensedAt: prescription.dispensed_at ?? null,
+      // The latest time it was dispensed; it can be dispensed again.
+      dispensedAt: prescription.last_dispensed_at ?? prescription.dispensed_at ?? null,
       followUpDate: isoDate(prescription.follow_up_date),
       originalFilename: prescription.original_filename, contentType: prescription.content_type, sizeBytes: prescription.size_bytes,
       title: prescription.title, blockchainStatus: prescription.blockchain_status, createdAt: prescription.created_at

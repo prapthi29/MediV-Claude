@@ -120,8 +120,8 @@ export default function PharmacyLinks() {
     }
   }
 
-  // Only typed prescriptions that still have medicines to give can be shared.
-  const shareable = (prescriptions || []).filter((p) => p.format === "form" && !p.dispensedAt);
+  // Typed prescriptions can be shared, again after each dispense for refills.
+  const shareable = (prescriptions || []).filter((p) => p.format === "form");
 
   return (
     <div className="card card-pad" style={{ marginBottom: 20 }}>
@@ -162,7 +162,7 @@ export default function PharmacyLinks() {
           </div>
           {prescriptions === null && <p style={{ fontSize: 13 }}>Loading prescriptions…</p>}
           {prescriptions && shareable.length === 0 && (
-            <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 0 }}>You have no prescriptions waiting to be dispensed.</p>
+            <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 0 }}>You have no prescriptions to share.</p>
           )}
           {shareable.length > 0 && (
             <table style={{ marginTop: 8 }}>
@@ -179,7 +179,12 @@ export default function PharmacyLinks() {
                   const share = shares.find((s) => s.prescriptionId === p.id && s.pharmacyLicenseId === pharmacy.licenseId && s.status === "active");
                   return (
                     <tr key={p.id}>
-                      <td>{p.title || "Prescription"}</td>
+                      <td>
+                        {p.title || "Prescription"}
+                        {p.dispensedAt && (
+                          <div style={{ color: "var(--muted)", fontSize: 12 }}>Last dispensed {fmtDate(p.dispensedAt)}</div>
+                        )}
+                      </td>
                       <td style={{ color: "var(--muted)" }}>{p.doctorName || "—"}</td>
                       <td style={{ color: "var(--muted)" }}>{fmtDate(p.createdAt)}</td>
                       <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>

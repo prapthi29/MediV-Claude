@@ -14,7 +14,7 @@ export function savePrescriptionPdf(view) {
     { type: "row", label: "Issued", text: prescription.createdAt ? new Date(prescription.createdAt).toLocaleString() : "-" },
     { type: "row", label: "Prescription ID", text: prescription.id },
   ];
-  if (prescription.dispensedAt) blocks.push({ type: "row", label: "Dispensed", text: new Date(prescription.dispensedAt).toLocaleString() });
+  if (prescription.dispensedAt) blocks.push({ type: "row", label: "Last dispensed", text: new Date(prescription.dispensedAt).toLocaleString() });
   if (diagnosis) blocks.push({ type: "heading", text: "Diagnosis" }, { type: "text", text: diagnosis });
   if (symptoms) blocks.push({ type: "heading", text: "Symptoms" }, { type: "text", text: symptoms });
   blocks.push({ type: "heading", text: "Medicines" });

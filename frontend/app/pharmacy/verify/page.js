@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import PortalShell from "../../../components/PortalShell";
 import TimeLeft from "../../../components/TimeLeft";
-import { EmptyState, StatusBadge, fmtDateTime } from "../../../components/ui";
+import { EmptyState, StatusBadge } from "../../../components/ui";
 import { api } from "../../../lib/api";
 import { FieldError } from "../../../components/FieldError";
 import { toast } from "../../../components/Toast";
@@ -60,7 +60,7 @@ export default function SharedPrescriptions() {
       // Once dispensed, this pharmacy can no longer open the prescription.
       setOpen(null);
       setBrowserCheck(null);
-      toast.success("Dispensed. The prescription is closed and listed in your dispensing history.");
+      toast.success("Dispensed. It is listed in your dispensing history. The patient can share it again for a refill.");
       load();
     } catch (err) {
       setPasswordError(err.message || "Couldn't dispense this prescription.");
@@ -142,7 +142,7 @@ export default function SharedPrescriptions() {
                 </div>
               )}
             </div>
-            <StatusBadge status={open.dispensed ? "dispensed" : verified ? "valid" : "invalid"} />
+            <StatusBadge status={verified ? "valid" : "invalid"} />
           </div>
 
           <table style={{ marginBottom: 16 }}>
@@ -186,9 +186,7 @@ export default function SharedPrescriptions() {
                 : "Not verified: this prescription could not be confirmed."}
           </div>
 
-          {open.dispensed ? (
-            <p style={{ fontWeight: 600, margin: 0 }}>Dispensed on {fmtDateTime(open.dispensed.at)}.</p>
-          ) : verified ? (
+          {verified ? (
             <form onSubmit={dispense}>
               <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
                 <div className="field" style={{ marginBottom: 0, flex: "1 1 240px" }}>

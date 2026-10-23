@@ -11,18 +11,20 @@ import { PrescriptionView, savePrescriptionPdf } from "../../../components/Presc
 // the consent wallet, where the patient links a pharmacy.
 function DispenseNote({ prescription, shares }) {
   const active = shares.filter((s) => s.prescriptionId === prescription.id && s.status === "active");
-  if (prescription.dispensedAt) {
-    return <p style={{ marginTop: 16, fontWeight: 600 }}>Fully dispensed on {fmtDateTime(prescription.dispensedAt)}.</p>;
-  }
   if (prescription.format !== "form") return null;
   return (
     <p style={{ marginTop: 16, fontSize: 13, color: "var(--muted)" }}>
+      {prescription.dispensedAt && (
+        <>
+          <strong style={{ color: "var(--ink)" }}>Last dispensed on {fmtDateTime(prescription.dispensedAt)}.</strong>{" "}
+        </>
+      )}
       {active.length > 0 ? (
         <>
           Shared with {active.map((s) => s.pharmacyName).join(", ")} · <TimeLeft until={active[0].expiresAt} />.{" "}
         </>
       ) : null}
-      To give this to a pharmacy, link the pharmacy in your <Link href="/patient/consents">consent wallet</Link>.
+      To give this to a pharmacy{prescription.dispensedAt ? " again" : ""}, link the pharmacy in your <Link href="/patient/consents">consent wallet</Link>.
     </p>
   );
 }
